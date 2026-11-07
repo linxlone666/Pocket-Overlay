@@ -1,12 +1,71 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Pocket Overlay</string>
-    <string name="service_description">Listens for Select and shoulder button shortcuts to change media volume or screen brightness. The service does not read screen content.</string>
-    <string name="setup_intro">Hold Select and tap a shoulder button. A small panel shows the level you changed, the time, and the battery over the current app.</string>
-    <string name="shortcut_list">R1   Volume up\nL1   Volume down\nR2   Brightness up\nL2   Brightness down</string>
+    <string name="service_description">Listens for controller shortcuts to change media volume or screen brightness. The service does not read screen content.</string>
+    <string name="overlay_page">Overlay</string>
+    <string name="settings_page">Settings</string>
+    <string name="settings_intro">Choose an app theme and manage the permissions for controller shortcuts.</string>
+    <string name="app_theme">App theme</string>
+    <string name="theme_hint">Material You follows your Android colors and light or dark mode. Dynamic colors require Android 12 or later.</string>
+    <string name="setup_intro">Customize the volume and brightness panels and the buttons that control them.</string>
+    <string name="preview_section">Size preview</string>
+    <string name="preview_time">10:42</string>
+    <string name="appearance_section">Appearance</string>
+    <string name="overlay_size">Overlay size</string>
+    <string name="slide_animation">Slide animation</string>
+    <string name="slide_in_time">Slide in duration</string>
+    <string name="slide_out_time">Slide out duration</string>
+    <string name="display_time">Time on screen</string>
+    <string name="milliseconds">%1$d ms</string>
+    <string name="duration_range">Enter a time from %1$d to %2$d ms.</string>
+    <string name="save">Save</string>
+    <string name="shortcuts_section">Controller shortcuts</string>
+    <string name="shortcut_button">Hold button</string>
+    <string name="volume_up">Volume up</string>
+    <string name="volume_down">Volume down</string>
+    <string name="brightness_up">Brightness up</string>
+    <string name="brightness_down">Brightness down</string>
+    <string name="button_select">Select</string>
+    <string name="button_start">Start</string>
+    <string name="binding_hint">Hold the first button and press an action button below. Tap any row to change its binding.</string>
+    <string name="record_button">Press and release a controller button. If a rear button does not register, map it to an unused digital key in your handheld settings first.</string>
+    <string name="restore_button">Use default</string>
+    <string name="swapped_buttons">Swapped with %1$s</string>
+    <string name="hold_to_repeat">Hold to repeat</string>
+    <string name="repeat_delay">Repeat delay</string>
+    <string name="repeat_speed">Repeat speed</string>
+    <string name="permissions_section">Permissions</string>
+    <string name="choice_label">%1$s · %2$s</string>
     <string name="accessibility_open">Enable controller shortcuts</string>
-    <string name="accessibility_enabled">Controller shortcuts enabled</string>
+    <string name="accessibility_detail">Detect the buttons you use for overlay shortcuts.</string>
     <string name="brightness_open">Allow brightness changes</string>
-    <string name="brightness_enabled">Brightness changes allowed</string>
+    <string name="brightness_permission">Brightness controls</string>
+    <string name="brightness_detail">Adjust screen brightness using your controller.</string>
+    <string name="permission_allowed">Allowed</string>
+    <string name="permission_needed">Action needed</string>
+    <string name="permissions_prompt">Review permissions in Settings</string>
     <string name="brightness_permission_needed">Allow brightness changes in Pocket Overlay.</string>
+    <string-array name="overlay_sizes">
+        <item>75%</item>
+        <item>90%</item>
+        <item>100%</item>
+        <item>110%</item>
+        <item>125%</item>
+    </string-array>
+    <string-array name="app_themes">
+        <item>Dark</item>
+        <item>Light</item>
+        <item>Material You</item>
+    </string-array>
+    <string-array name="repeat_delays">
+        <item>0.5 s</item>
+        <item>1 s</item>
+        <item>1.5 s</item>
+        <item>2 s</item>
+    </string-array>
+    <string-array name="repeat_speeds">
+        <item>Slow (250 ms)</item>
+        <item>Normal (150 ms)</item>
+        <item>Fast (100 ms)</item>
+    </string-array>
 </resources>

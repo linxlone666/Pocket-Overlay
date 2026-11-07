@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="PocketOverlayTheme" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:colorAccent">#D7C6FC</item>
+        <item name="android:windowBackground">#17151D</item>
+        <item name="android:statusBarColor">#17151D</item>
+        <item name="android:navigationBarColor">#17151D</item>
+    </style>
+    <style name="PocketOverlayLightTheme" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:colorAccent">#5B4179</item>
+        <item name="android:windowBackground">#FBF7FF</item>
+        <item name="android:statusBarColor">#FBF7FF</item>
+        <item name="android:navigationBarColor">#FBF7FF</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
+</resources>

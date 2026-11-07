@@ -1,0 +1,16 @@
+plugins {
+    id 'com.android.application' version '8.7.3'
+}
+
+android {
+    namespace 'app.pocketoverlay'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'app.pocketoverlay'
+        minSdk 28
+        targetSdk 34
+        versionCode 2
+        versionName '1.1'
+    }
+}

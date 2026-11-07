@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Pocket Overlay</string>
+    <string name="service_description">Listens for Select and shoulder button shortcuts to change media volume or screen brightness. The service does not read screen content.</string>
+    <string name="setup_intro">Hold Select and tap a shoulder button. A small panel shows the level you changed, the time, and the battery over the current app.</string>
+    <string name="shortcut_list">R1   Volume up\nL1   Volume down\nR2   Brightness up\nL2   Brightness down</string>
+    <string name="accessibility_open">Enable controller shortcuts</string>
+    <string name="accessibility_enabled">Controller shortcuts enabled</string>
+    <string name="brightness_open">Allow brightness changes</string>
+    <string name="brightness_enabled">Brightness changes allowed</string>
+    <string name="brightness_permission_needed">Allow brightness changes in Pocket Overlay.</string>
+</resources>

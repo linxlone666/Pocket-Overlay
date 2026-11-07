@@ -3,6 +3,71 @@
     <string name="app_name">Pocket Overlay</string>
     <string name="service_description">Listens for controller shortcuts to change media volume or screen brightness. The service does not read screen content.</string>
     <string name="overlay_page">Overlay</string>
+    <string name="performance_page">Performance</string>
+    <string name="performance_intro">Keep live device stats visible while you play.</string>
+    <string name="performance_display">Display</string>
+    <string name="performance_enable">Show performance overlay</string>
+    <string name="performance_position">Reset position</string>
+    <string name="performance_custom_position">Custom position</string>
+    <string name="performance_pin">Pin</string>
+    <string name="performance_preview">Live HUD preview</string>
+    <string name="performance_preview_empty">Select a metric to preview the HUD.</string>
+    <string name="performance_ram_format">RAM display</string>
+    <string-array name="performance_ram_formats">
+        <item>Percentage</item>
+        <item>Used / total (GiB)</item>
+        <item>Used only (GiB)</item>
+    </string-array>
+    <string name="performance_ram_used_gib">%1$.1f GiB</string>
+    <string name="performance_ram_gib">%1$.1f / %2$.1f GiB</string>
+    <string name="performance_default">Reset to default</string>
+    <string name="performance_live_status">Live status</string>
+    <string name="performance_background">Background</string>
+    <string name="performance_opacity">Background opacity</string>
+    <string name="performance_scale">HUD scale</string>
+    <string name="performance_order">Metric order</string>
+    <string name="performance_order_hint">Use the arrows to move a group. This order applies to every layout.</string>
+    <string name="performance_move_up">Move %1$s up</string>
+    <string name="performance_move_down">Move %1$s down</string>
+    <string name="performance_reset_order">Reset order</string>
+    <string name="performance_inline">Inline</string>
+    <string name="performance_list">List</string>
+    <string name="performance_full_list">Full list</string>
+    <string name="performance_drag_hint">Drag or pinch the HUD while visible. Pin it to pass touches through to your game.</string>
+    <string name="performance_shortcut">Toggle performance overlay</string>
+    <string name="performance_cycle_shortcut">Cycle HUD layout</string>
+    <string name="performance_shortcut_hint">Each shortcut can use one button or its own two-button combo.</string>
+    <string name="performance_clear_shortcut">Clear shortcut</string>
+    <string name="shortcut_unassigned">Unassigned</string>
+    <string name="shortcut_in_use">%1$s is assigned to %2$s. Choose an unused button, or change that binding first.</string>
+    <string name="shortcut_combo">%1$s + %2$s</string>
+    <string name="performance_metrics_section">Metrics</string>
+    <string name="performance_presets">Presets</string>
+    <string name="preset_compact">Compact</string>
+    <string name="preset_compact_detail">FPS and battery</string>
+    <string name="preset_gaming">Gaming</string>
+    <string name="preset_gaming_detail">FPS, CPU, GPU and battery</string>
+    <string name="preset_detailed">Detailed</string>
+    <string name="preset_detailed_detail">Gaming stats, temperatures and power</string>
+    <string name="metric_fps">FPS</string>
+    <string name="metric_cpu">CPU</string>
+    <string name="metric_gpu">GPU</string>
+    <string name="metric_cpu_temperature">CPU temp</string>
+    <string name="metric_gpu_temperature">GPU temp</string>
+    <string name="metric_battery">Battery</string>
+    <string name="metric_battery_temperature">Battery temp</string>
+    <string name="metric_power">Battery power</string>
+    <string name="metric_memory">RAM</string>
+    <string name="metric_refresh">Display refresh rate</string>
+    <string name="performance_degrees">%1$.1f °C</string>
+    <string name="performance_watts">%1$+.2f W</string>
+    <string name="performance_hertz">%1$d Hz</string>
+    <string name="performance_percent">%1$d%%</string>
+    <string name="metric_battery_time">Battery time left</string>
+    <string name="metric_fan">Fan speed</string>
+    <string name="performance_batt">Batt</string>
+    <string name="performance_fan">FAN</string>
+    <string name="performance_runtime">~%1$dh %2$02dm</string>
     <string name="settings_page">Settings</string>
     <string name="settings_intro">Choose an app theme and manage the permissions for controller shortcuts.</string>
     <string name="app_theme">App theme</string>
@@ -20,22 +85,20 @@
     <string name="duration_range">Enter a time from %1$d to %2$d ms.</string>
     <string name="save">Save</string>
     <string name="shortcuts_section">Controller shortcuts</string>
-    <string name="shortcut_button">Hold button</string>
     <string name="volume_up">Volume up</string>
     <string name="volume_down">Volume down</string>
     <string name="brightness_up">Brightness up</string>
     <string name="brightness_down">Brightness down</string>
     <string name="button_select">Select</string>
     <string name="button_start">Start</string>
-    <string name="binding_hint">Hold the first button and press an action button below. Tap any row to change its binding.</string>
-    <string name="record_button">Press and release a controller button. If a rear button does not register, map it to an unused digital key in your handheld settings first.</string>
+    <string name="binding_hint">Tap a tile to bind one button or a two-button combo.</string>
+    <string name="record_button">Tap one button to bind it. For a combo, hold the first button, press the second, then release both.</string>
     <string name="restore_button">Use default</string>
-    <string name="swapped_buttons">Swapped with %1$s</string>
+    <string name="shortcut_too_many_buttons">Release all buttons, then try one button or a two-button combo.</string>
     <string name="hold_to_repeat">Hold to repeat</string>
     <string name="repeat_delay">Repeat delay</string>
     <string name="repeat_speed">Repeat speed</string>
     <string name="permissions_section">Permissions</string>
-    <string name="choice_label">%1$s · %2$s</string>
     <string name="accessibility_open">Enable controller shortcuts</string>
     <string name="accessibility_detail">Detect the buttons you use for overlay shortcuts.</string>
     <string name="brightness_open">Allow brightness changes</string>
@@ -51,6 +114,12 @@
         <item>100%</item>
         <item>110%</item>
         <item>125%</item>
+    </string-array>
+    <string-array name="performance_positions">
+        <item>Top left</item>
+        <item>Top right</item>
+        <item>Bottom left</item>
+        <item>Bottom right</item>
     </string-array>
     <string-array name="app_themes">
         <item>Dark</item>

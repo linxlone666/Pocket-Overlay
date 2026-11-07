@@ -11,8 +11,6 @@ import android.os.PowerManager;
 import android.provider.Settings;
 import android.text.format.DateFormat;
 import android.util.DisplayMetrics;
-import android.util.SparseArray;
-import android.util.SparseIntArray;
 import android.view.Gravity;
 import android.view.InputDevice;
 import android.view.KeyEvent;
@@ -23,7 +21,9 @@ import android.view.animation.DecelerateInterpolator;
 import android.widget.FrameLayout;
 import android.widget.Toast;
 
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 
 import app.pocketoverlay.OverlaySettings.Binding;
 
@@ -32,8 +32,20 @@ public final class ShortcutService extends AccessibilityService {
     private static final int BRIGHTNESS_STEPS = 20;
     private static final int VOLUME = AudioManager.STREAM_MUSIC;
 
-    private final SparseArray<SparseArray<Runnable>> intercepted = new SparseArray<>();
-    private final SparseIntArray heldModifiers = new SparseIntArray();
+    private static final class PressedKey {
+        final int device;
+        final int key;
+        boolean consumed;
+        Binding pending;
+        Runnable repeat;
+
+        PressedKey(KeyEvent event) {
+            device = event.getDeviceId();
+            key = event.getKeyCode();
+        }
+    }
+
+    private final List<PressedKey> pressed = new ArrayList<>();
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable dismiss = this::slideOut;
     private AudioManager audio;
@@ -41,6 +53,7 @@ public final class ShortcutService extends AccessibilityService {
     private BatteryManager battery;
     private PowerManager power;
     private SharedPreferences settings;
+    private PerformanceOverlay performanceOverlay;
     private FrameLayout overlayWindow;
     private OverlayView panel;
     private boolean slidingOut;
@@ -52,87 +65,123 @@ public final class ShortcutService extends AccessibilityService {
         battery = getSystemService(BatteryManager.class);
         power = getSystemService(PowerManager.class);
         settings = OverlaySettings.open(this);
+        if (performanceOverlay != null) {
+            performanceOverlay.close();
+        }
+        performanceOverlay = new PerformanceOverlay(this, settings, windows);
     }
 
     @Override
     protected boolean onKeyEvent(KeyEvent event) {
-        int device = event.getDeviceId();
-        int key = event.getKeyCode();
-        SparseArray<Runnable> handled = intercepted.get(device);
-        Runnable heldShortcut = handled == null ? null : handled.get(key);
-        boolean down = event.getAction() == KeyEvent.ACTION_DOWN;
-        int modifier = Binding.MODIFIER.key(settings);
-        if (heldShortcut == null && (key == modifier || heldModifiers.get(device) == key)) {
-            if (down && key == modifier && event.getRepeatCount() == 0 && !OverlaySettings.recordingButton) {
-                heldModifiers.put(device, key);
-            } else if (event.getAction() == KeyEvent.ACTION_UP && heldModifiers.get(device) == key) {
-                heldModifiers.delete(device);
-                if (heldModifiers.indexOfValue(key) < 0) {
-                    for (int index = 0; index < intercepted.size(); index++) {
-                        SparseArray<Runnable> shortcuts = intercepted.valueAt(index);
-                        for (int button = 0; button < shortcuts.size(); button++) {
-                            handler.removeCallbacks(shortcuts.valueAt(button));
-                        }
-                    }
-                }
-            }
-            return false;
-        }
-
+        PressedKey existing = findPressed(event);
         if (event.getAction() == KeyEvent.ACTION_UP) {
-            if (heldShortcut == null) {
+            if (existing == null) {
                 return false;
             }
-            handler.removeCallbacks(heldShortcut);
-            handled.remove(key);
-            if (handled.size() == 0) {
-                intercepted.remove(device);
+            pressed.remove(existing);
+            if (existing.repeat != null) {
+                handler.removeCallbacks(existing.repeat);
             }
-            return true;
+            if (existing.pending != null && !event.isCanceled() && !OverlaySettings.recordingButton
+                    && Binding.forKeys(settings, KeyEvent.KEYCODE_UNKNOWN, existing.key) == existing.pending) {
+                applyShortcut(existing.pending);
+            }
+            return existing.consumed;
         }
-        if (!down) {
-            return false;
+        if (event.getAction() != KeyEvent.ACTION_DOWN || event.getRepeatCount() != 0) {
+            return existing != null && existing.consumed;
         }
-        if (heldShortcut != null) {
-            return true;
+        if (existing != null) {
+            return existing.consumed;
         }
-        if (event.getRepeatCount() != 0 || OverlaySettings.recordingButton
-                || heldModifiers.indexOfValue(modifier) < 0) {
-            return false;
-        }
-        Binding action = Binding.forKey(settings, key);
-        if (action == null || !applyShortcut(action)) {
+        if (OverlaySettings.recordingButton || settings == null) {
             return false;
         }
 
-        if (handled == null) {
-            handled = new SparseArray<>();
-            intercepted.put(device, handled);
+        int key = event.getKeyCode();
+        PressedKey first = null;
+        Binding action = null;
+        // If several combo starters are held, use the most recently pressed matching one.
+        for (int i = pressed.size() - 1; i >= 0; i--) {
+            PressedKey candidate = pressed.get(i);
+            if (candidate.key != key) {
+                action = Binding.forKeys(settings, candidate.key, key);
+                if (action != null) {
+                    first = candidate;
+                    break;
+                }
+            }
         }
-        Runnable repeat = new Runnable() {
+        if (action == null) {
+            action = Binding.forKeys(settings, KeyEvent.KEYCODE_UNKNOWN, key);
+        }
+        boolean startsCombo = Binding.startsCombo(settings, key);
+        if (action == null && !startsCombo) {
+            return false;
+        }
+
+        PressedKey current = new PressedKey(event);
+        pressed.add(current);
+        if (action == null) {
+            return false;
+        }
+        if (first == null && startsCombo) {
+            // Wait for release so a single press does not fire when used to start a combo.
+            current.pending = action;
+            current.consumed = true;
+        } else if (applyShortcut(action)) {
+            current.consumed = true;
+            if (first != null) {
+                first.pending = null;
+            }
+            startRepeat(action, first, current);
+        }
+        return current.consumed;
+    }
+
+    private PressedKey findPressed(KeyEvent event) {
+        for (PressedKey key : pressed) {
+            if (key.device == event.getDeviceId() && key.key == event.getKeyCode()) {
+                return key;
+            }
+        }
+        return null;
+    }
+
+    private void startRepeat(Binding action, PressedKey first, PressedKey current) {
+        if (action.isPerformanceShortcut() || !settings.getBoolean(OverlaySettings.REPEAT, true)) {
+            return;
+        }
+        int firstKey = first == null ? KeyEvent.KEYCODE_UNKNOWN : first.key;
+        current.repeat = new Runnable() {
             @Override
             public void run() {
-                if (settings.getBoolean(OverlaySettings.REPEAT, true)
-                        && !OverlaySettings.recordingButton && Binding.MODIFIER.key(settings) == modifier
-                        && heldModifiers.indexOfValue(modifier) >= 0 && action.key(settings) == key
-                        && power.isInteractive() && InputDevice.getDevice(device) != null
+                if (settings.getBoolean(OverlaySettings.REPEAT, true) && !OverlaySettings.recordingButton
+                        && (first == null || (pressed.contains(first) && InputDevice.getDevice(first.device) != null))
+                        && Binding.forKeys(settings, firstKey, current.key) == action
+                        && power.isInteractive() && InputDevice.getDevice(current.device) != null
                         && applyShortcut(action)) {
                     handler.postDelayed(this, settings.getInt(
                             OverlaySettings.REPEAT_INTERVAL, OverlaySettings.DEFAULT_INTERVAL));
                 }
             }
         };
-        handled.put(key, repeat);
-        if (settings.getBoolean(OverlaySettings.REPEAT, true)) {
-            handler.postDelayed(repeat, settings.getInt(
-                    OverlaySettings.REPEAT_DELAY, OverlaySettings.DEFAULT_DELAY));
-        }
-        return true;
+        handler.postDelayed(current.repeat, settings.getInt(
+                OverlaySettings.REPEAT_DELAY, OverlaySettings.DEFAULT_DELAY));
     }
 
     private boolean applyShortcut(Binding action) {
         boolean brightness;
         switch (action) {
+            case PERFORMANCE:
+                settings.edit().putBoolean(OverlaySettings.PERFORMANCE_ENABLED,
+                        !settings.getBoolean(OverlaySettings.PERFORMANCE_ENABLED, false)).apply();
+                return true;
+            case PERFORMANCE_CYCLE:
+                int layout = settings.getInt(OverlaySettings.PERFORMANCE_LAYOUT, OverlaySettings.PERFORMANCE_LIST);
+                int next = (layout + 1) % (OverlaySettings.PERFORMANCE_FULL_LIST + 1);
+                settings.edit().putInt(OverlaySettings.PERFORMANCE_LAYOUT, next).apply();
+                return true;
             case VOLUME_UP:
                 audio.adjustStreamVolume(VOLUME, AudioManager.ADJUST_RAISE, 0);
                 brightness = false;
@@ -260,14 +309,16 @@ public final class ShortcutService extends AccessibilityService {
     @Override
     public void onInterrupt() {
         handler.removeCallbacksAndMessages(null);
+        pressed.clear();
         hideOverlay();
     }
 
     @Override
     public void onDestroy() {
         onInterrupt();
-        heldModifiers.clear();
-        intercepted.clear();
+        if (performanceOverlay != null) {
+            performanceOverlay.close();
+        }
         super.onDestroy();
     }
 }

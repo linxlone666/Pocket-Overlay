@@ -4,7 +4,7 @@ Pocket Overlay is a standalone Android app for a controller with digital buttons
 
 The app requires Android 9 or later and was tested on a Retroid Pocket 6 running Android 13. It uses Android Accessibility to detect shortcuts and the Modify system settings permission to adjust brightness. It has no network permission and does not read screen content.
 
-Open **Overlay** to change the size, slide durations, time on screen, button bindings, or repeat behavior. To bind a rear button that does not register, first map it to an unused digital key in your handheld settings. **Settings** contains the permission controls and the Dark, Light, and Material You themes. The selected theme applies to the app and the overlay. Material You uses Android's palette on Android 12 or later.
+Open **Overlay** to change the size, slide durations, time on screen, button bindings, or repeat behavior. Tap one button in the recorder to bind a single press. To record a combo, hold the first button, press the second, and release both. To bind a rear button that does not register, first map it to an unused digital key in your handheld settings. **Settings** contains the permission controls and the Dark, Light, and Material You themes. The selected theme applies to the app and the overlay. Material You uses Android's palette on Android 12 or later.
 
 ## Set up on the Pocket 6
 
@@ -13,7 +13,13 @@ Open **Overlay** to change the size, slide durations, time on screen, button bin
 3. Return to Pocket Overlay and tap **Allow brightness changes** to grant the system settings permission.
 4. Test the four shortcuts over an emulator. If L2/R2 only send analog input, set the handheld's L2/R2 mode to **Both** or **Digital**. Disable overlapping shortcuts in other key mappers or RetroHrai while testing.
 
-Volume adjusts Android's shared media stream. The hold button is passed through to the game, and the shoulder button is intercepted only when its shortcut runs. If adaptive brightness changes the level back, disable it in Display settings to use manual brightness.
+Volume adjusts Android's shared media stream. A combo starter passes through to the game unless it also has its own single-button shortcut. The action button is intercepted when its shortcut runs. If adaptive brightness changes the level back, disable it in Display settings to use manual brightness.
+
+## Performance overlay
+
+Open **Performance** to enable the overlay, pick Inline, List, or Full list, and choose a preset or select individual metrics. The live preview reflects the HUD settings. RAM display offers percentage, used / total GiB, and used GiB. Drag the HUD to move it or pinch it to resize. Pin it to pass touches through to your game. Use Background, HUD scale, and Metric order to change its appearance, or Reset position to return it to a corner. Record a button or combo under Controller shortcuts to toggle the overlay or cycle its layout. Battery level, battery temperature, battery power, RAM, and display refresh rate use Android's built-in readings. Battery power estimates charging or discharge at the battery from current and voltage. Battery time left estimates runtime from recent discharge while unplugged. The Pocket 6 fan reading reports fan duty as a percentage.
+
+CPU and GPU load and chip temperatures work directly on the Pocket 6. Other devices may restrict access to these counters. On compatible stock firmware such as the Pocket 6, FPS reads the foreground app's frame timings through the handheld's built-in service. It needs no separate setup. A dash indicates that the selected reading is unavailable.
 
 ## Build from source
 

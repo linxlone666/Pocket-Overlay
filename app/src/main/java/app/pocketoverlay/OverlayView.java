@@ -47,27 +47,39 @@ final class OverlayView extends View {
         Context context = getContext();
         boolean dark = OverlaySettings.usesDarkColors(context, theme);
         if (theme == OverlaySettings.MATERIAL_YOU && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            int surface = context.getColor(dark
-                    ? android.R.color.system_neutral1_800 : android.R.color.system_neutral1_50);
-            panelColor = 0xde000000 | (surface & 0x00ffffff);
             trackColor = context.getColor(dark
                     ? android.R.color.system_neutral2_600 : android.R.color.system_neutral2_200);
             brightnessColor = context.getColor(dark
                     ? android.R.color.system_accent3_200 : android.R.color.system_accent3_700);
             volumeColor = context.getColor(dark
                     ? android.R.color.system_accent1_200 : android.R.color.system_accent1_700);
-            statusColor = context.getColor(dark
-                    ? android.R.color.system_neutral1_100 : android.R.color.system_neutral1_900);
             batteryColor = context.getColor(dark
                     ? android.R.color.system_accent1_500 : android.R.color.system_accent1_300);
         } else {
-            panelColor = dark ? 0xde38353e : 0xdef8f0fc;
             trackColor = dark ? 0xff56525d : 0xffd5cadc;
             brightnessColor = dark ? 0xffd5a4b5 : 0xff8f4965;
             volumeColor = dark ? 0xffbbabdf : 0xff624785;
-            statusColor = dark ? 0xffbcb7c3 : 0xff362c40;
             batteryColor = dark ? 0xff897ba6 : 0xffb9a5cd;
         }
+        panelColor = panelColor(context, theme, dark);
+        statusColor = statusColor(context, theme, dark);
+    }
+
+    static int panelColor(Context context, int theme, boolean dark) {
+        if (theme == OverlaySettings.MATERIAL_YOU && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            int surface = context.getColor(dark
+                    ? android.R.color.system_neutral1_800 : android.R.color.system_neutral1_50);
+            return 0xde000000 | (surface & 0x00ffffff);
+        }
+        return dark ? 0xde38353e : 0xdef8f0fc;
+    }
+
+    static int statusColor(Context context, int theme, boolean dark) {
+        if (theme == OverlaySettings.MATERIAL_YOU && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            return context.getColor(dark
+                    ? android.R.color.system_neutral1_100 : android.R.color.system_neutral1_900);
+        }
+        return dark ? 0xffbcb7c3 : 0xff362c40;
     }
 
     void update(boolean brightness, float level, int segments, String time,

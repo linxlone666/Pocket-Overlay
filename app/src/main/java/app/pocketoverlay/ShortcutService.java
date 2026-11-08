@@ -54,6 +54,7 @@ public final class ShortcutService extends AccessibilityService {
     private PowerManager power;
     private SharedPreferences settings;
     private PerformanceOverlay performanceOverlay;
+    private NavigationShortcuts navigation;
     private FrameLayout overlayWindow;
     private OverlayView panel;
     private boolean slidingOut;
@@ -65,6 +66,10 @@ public final class ShortcutService extends AccessibilityService {
         battery = getSystemService(BatteryManager.class);
         power = getSystemService(PowerManager.class);
         settings = OverlaySettings.open(this);
+        if (navigation != null) {
+            navigation.clear();
+        }
+        navigation = new NavigationShortcuts(this, settings, handler);
         if (performanceOverlay != null) {
             performanceOverlay.close();
         }
@@ -73,6 +78,9 @@ public final class ShortcutService extends AccessibilityService {
 
     @Override
     protected boolean onKeyEvent(KeyEvent event) {
+        if (navigation != null && navigation.onKeyEvent(event)) {
+            return true;
+        }
         PressedKey existing = findPressed(event);
         if (event.getAction() == KeyEvent.ACTION_UP) {
             if (existing == null) {
@@ -178,9 +186,7 @@ public final class ShortcutService extends AccessibilityService {
                         !settings.getBoolean(OverlaySettings.PERFORMANCE_ENABLED, false)).apply();
                 return true;
             case PERFORMANCE_CYCLE:
-                int layout = settings.getInt(OverlaySettings.PERFORMANCE_LAYOUT, OverlaySettings.PERFORMANCE_LIST);
-                int next = (layout + 1) % (OverlaySettings.PERFORMANCE_FULL_LIST + 1);
-                settings.edit().putInt(OverlaySettings.PERFORMANCE_LAYOUT, next).apply();
+                OverlaySettings.cyclePerformanceLayout(settings);
                 return true;
             case VOLUME_UP:
                 audio.adjustStreamVolume(VOLUME, AudioManager.ADJUST_RAISE, 0);
@@ -238,7 +244,7 @@ public final class ShortcutService extends AccessibilityService {
             panel.animate().cancel();
         }
         panel.applyTheme(settings.getInt(OverlaySettings.THEME, OverlaySettings.DARK));
-        panel.update(brightness, level, segments, time, batteryPercent, battery.isCharging());
+        panel.update(brightness, level, segments, time, batteryPercent, battery.isCharging(), settings);
 
         DisplayMetrics metrics = getResources().getDisplayMetrics();
         float scale = (float) metrics.densityDpi / OverlayView.REFERENCE_DENSITY_DPI;
@@ -310,6 +316,9 @@ public final class ShortcutService extends AccessibilityService {
     public void onInterrupt() {
         handler.removeCallbacksAndMessages(null);
         pressed.clear();
+        if (navigation != null) {
+            navigation.clear();
+        }
         hideOverlay();
     }
 

@@ -48,9 +48,12 @@ final class PerformanceStatus {
     private void refresh() {
         if (!sampling) {
             sampling = true;
+            boolean fullList = settings.getInt(OverlaySettings.PERFORMANCE_LAYOUT, OverlaySettings.PERFORMANCE_LIST)
+                    == OverlaySettings.PERFORMANCE_FULL_LIST;
+            boolean readFanRpm = OverlaySettings.fanFormat(settings) != OverlaySettings.FAN_PERCENTAGE;
             worker.execute(() -> {
                 // The dashboard is foreground here, so there is no game surface to sample.
-                Bundle sample = stats.sample(PerformanceMetric.SAMPLED & ~PerformanceMetric.FPS.bit);
+                Bundle sample = stats.sample(PerformanceMetric.SAMPLED & ~PerformanceMetric.FPS.bit, fullList, readFanRpm);
                 handler.post(() -> {
                     sampling = false;
                     if (visible) {

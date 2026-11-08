@@ -16,10 +16,11 @@ final class PerformanceReadings {
     private final ActivityManager activity;
     private final DisplayManager displays;
     private final BatteryManager batteryManager;
-    private static final int MIN_DISCHARGE_MICROAMPS = 50_000;
-    private static final long DISCHARGE_SMOOTHING_MS = 30_000;
-    private double dischargeAverage;
-    private long lastDischargeSample;
+    private static final int MIN_ESTIMATE_MICROAMPS = 50_000;
+    private static final long CURRENT_SMOOTHING_MS = 30_000;
+    private double averageCurrent;
+    private long lastCurrentSample;
+    private int lastBatteryStatus;
     private final ActivityManager.MemoryInfo memory = new ActivityManager.MemoryInfo();
 
     PerformanceReadings(Context context) {
@@ -50,6 +51,9 @@ final class PerformanceReadings {
         if (metric == PerformanceMetric.BATTERY_TIME) {
             return batteryTime(battery);
         }
+        if (metric == PerformanceMetric.FAN) {
+            return fanValue(sample);
+        }
         float value = reading(metric, battery, sample);
         if (!Float.isFinite(value)) {
             return "—";
@@ -67,6 +71,24 @@ final class PerformanceReadings {
                 return Integer.toString(Math.round(value));
             default:
                 return context.getString(R.string.performance_percent, Math.round(value));
+        }
+    }
+
+    private String fanValue(Bundle sample) {
+        float duty = sample.getFloat(Integer.toString(PerformanceMetric.FAN.bit), Float.NaN);
+        float rpm = sample.getFloat(PerformanceStats.FAN_RPM, Float.NaN);
+        String percentage = Float.isFinite(duty)
+                ? context.getString(R.string.performance_percent, Math.round(duty)) : "—";
+        String speed = Float.isFinite(rpm)
+                ? context.getString(R.string.performance_rpm, Math.round(rpm)) : "—";
+        switch (OverlaySettings.fanFormat(settings)) {
+            case OverlaySettings.FAN_RPM_ONLY:
+                return speed;
+            case OverlaySettings.FAN_PERCENTAGE_AND_RPM:
+                return Float.isFinite(duty) || Float.isFinite(rpm)
+                        ? context.getString(R.string.performance_fan_combined, percentage, speed) : "—";
+            default:
+                return percentage;
         }
     }
 
@@ -92,31 +114,53 @@ final class PerformanceReadings {
     }
 
     private String batteryTime(Intent battery) {
-        if (extra(battery, BatteryManager.EXTRA_PLUGGED) != 0) {
-            lastDischargeSample = 0;
-            return "—";
+        int status = extra(battery, BatteryManager.EXTRA_STATUS);
+        if (status == BatteryManager.BATTERY_STATUS_FULL) {
+            lastCurrentSample = 0;
+            return context.getString(R.string.performance_battery_full);
         }
+
+
         int current = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW);
         int charge = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER);
-        if (current == Integer.MIN_VALUE || current >= 0 || charge <= 0) {
-            lastDischargeSample = 0;
+        if (current == Integer.MIN_VALUE || charge <= 0) {
+            lastCurrentSample = 0;
             return "—";
         }
         long now = SystemClock.elapsedRealtime();
-        long elapsed = now - lastDischargeSample;
-        double discharge = -(double) current;
-        if (lastDischargeSample == 0 || elapsed >= DISCHARGE_SMOOTHING_MS) {
-            dischargeAverage = discharge;
+        long elapsed = now - lastCurrentSample;
+        if (lastCurrentSample == 0 || elapsed >= CURRENT_SMOOTHING_MS || status != lastBatteryStatus) {
+            averageCurrent = current;
         } else {
-            double weight = 1 - Math.exp(-elapsed / (double) DISCHARGE_SMOOTHING_MS);
-            dischargeAverage += weight * (discharge - dischargeAverage);
+            double weight = 1 - Math.exp(-elapsed / (double) CURRENT_SMOOTHING_MS);
+            averageCurrent += weight * (current - averageCurrent);
         }
-        lastDischargeSample = now;
-        if (dischargeAverage < MIN_DISCHARGE_MICROAMPS) {
+        lastCurrentSample = now;
+        lastBatteryStatus = status;
+        double rate = Math.abs(averageCurrent);
+        if (rate < MIN_ESTIMATE_MICROAMPS) {
             return "—";
         }
-        long minutes = Math.round(60.0 * charge / dischargeAverage);
-        return context.getString(R.string.performance_runtime, minutes / 60, minutes % 60);
+
+        boolean charging = averageCurrent > 0;
+        double capacity = charge;
+        if (charging) {
+            int level = extra(battery, BatteryManager.EXTRA_LEVEL);
+            int scale = extra(battery, BatteryManager.EXTRA_SCALE);
+            if (level <= 0 || scale <= 0 || level > scale) {
+                return "—";
+            }
+            if (level == scale) {
+                return context.getString(R.string.performance_battery_full);
+            }
+            capacity = charge * ((scale - level) / (double) level);
+        }
+        return formatBatteryTime(Math.max(1, Math.round(60 * capacity / rate)), charging);
+    }
+
+    private String formatBatteryTime(long minutes, boolean charging) {
+        return context.getString(charging ? R.string.performance_charge_time : R.string.performance_runtime,
+                minutes / 60, minutes % 60);
     }
 
     private static int extra(Intent battery, String name) {

@@ -1,11 +1,5 @@
 package app.pocketoverlay;
 
-import android.annotation.SuppressLint;
-import android.os.IBinder;
-import android.os.Parcel;
-import android.os.RemoteException;
-
-import java.nio.charset.StandardCharsets;
 import java.util.NavigableSet;
 import java.util.TreeSet;
 
@@ -15,20 +9,12 @@ final class RetroidFrameRate {
             "dumpsys -t 1 activity activities 2>/dev/null | awk "
             + "'!found && /topResumedActivity=ActivityRecord/ {split($3,a,\"/\"); print a[1]; found=1}'";
 
-    private IBinder service;
-    private boolean checkedForService;
+    private final RetroidFirmware firmware = new RetroidFirmware();
     private String packageName;
     private String layer;
 
     float read() {
-        if (!checkedForService || (service != null && !service.isBinderAlive())) {
-            service = findService();
-            checkedForService = true;
-        }
-        if (service == null) {
-            return Float.NaN;
-        }
-        String foreground = query(FOREGROUND);
+        String foreground = firmware.query(FOREGROUND);
         if (!foreground.matches("[A-Za-z0-9_.]+") || "com.android.systemui".equals(foreground)) {
             return Float.NaN;
         }
@@ -44,7 +30,7 @@ final class RetroidFrameRate {
         }
 
         // The firmware limits reply size. Return a short window of actual presentation timestamps.
-        String timestamps = query("dumpsys -t 1 SurfaceFlinger --latency " + quote(layer)
+        String timestamps = firmware.query("dumpsys -t 1 SurfaceFlinger --latency " + quote(layer)
                 + " | awk '$2>0 && $2<9223372036854775807{print $2}' | tail -8 | xargs");
         float fps = calculateFps(timestamps);
         if (!Float.isFinite(fps)) {
@@ -55,11 +41,11 @@ final class RetroidFrameRate {
 
     private String findLayer(String foreground) {
         String matching = "dumpsys -t 1 SurfaceFlinger --list | grep -F " + quote(foreground + "/");
-        String surface = query(matching + " | grep '^SurfaceView.*BLAST' | tail -1");
+        String surface = firmware.query(matching + " | grep '^SurfaceView.*BLAST' | tail -1");
         if (!surface.isEmpty()) {
             return surface;
         }
-        String window = query(matching + " | grep '^[^ ]*/' | tail -1");
+        String window = firmware.query(matching + " | grep '^[^ ]*/' | tail -1");
         return window.isEmpty() ? null : window;
     }
 
@@ -92,34 +78,4 @@ final class RetroidFrameRate {
         return "'" + value.replace("'", "'\\''") + "'";
     }
 
-    private String query(String command) {
-        Parcel request = Parcel.obtain();
-        Parcel reply = Parcel.obtain();
-        try {
-            request.writeStringArray(new String[]{command, "1"});
-            if (service.transact(0, request, reply, 0)) {
-                byte[] bytes = reply.createByteArray();
-                if (bytes != null) {
-                    return new String(bytes, StandardCharsets.UTF_8).trim();
-                }
-            }
-        } catch (RemoteException | RuntimeException ignored) {
-            // Other firmware can hide the service or use a different protocol.
-        } finally {
-            request.recycle();
-            reply.recycle();
-        }
-        return "";
-    }
-
-    @SuppressLint({"DiscouragedPrivateApi", "PrivateApi"})
-    private static IBinder findService() {
-        try {
-            Class<?> services = Class.forName("android.os.ServiceManager");
-            return (IBinder) services.getDeclaredMethod("getService", String.class)
-                    .invoke(null, "PServerBinder");
-        } catch (ReflectiveOperationException | RuntimeException ignored) {
-            return null;
-        }
-    }
 }

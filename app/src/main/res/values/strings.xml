@@ -1,23 +1,88 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Pocket Overlay</string>
-    <string name="service_description">Listens for controller shortcuts to change media volume or screen brightness. The service does not read screen content.</string>
+    <string name="service_description">Listens for controller shortcuts and sends taps or swipes in Recent apps. The service does not read screen content.</string>
     <string name="overlay_page">Overlay</string>
+    <string name="navigation_page">Home &amp; Back</string>
+    <string name="navigation_intro">Map the physical Home and Back buttons on your Retroid Pocket 6.</string>
+    <string name="navigation_enable">Enable Home and Back gestures</string>
+    <string name="navigation_home_protection">Retroid accidental Home protection</string>
+    <string name="navigation_home_protection_hint">Open Handheld Settings → Input. Turn off protection there if one press does not reach Home.</string>
+    <string name="navigation_home_protection_on">On · Open Handheld Settings</string>
+    <string name="navigation_home_protection_off">Off · Open Handheld Settings</string>
+    <string name="navigation_home_protection_unavailable">Open Handheld Settings</string>
+    <string name="navigation_tap_hint">When a double tap is assigned, a single tap waits briefly to see if you tap again.</string>
+    <string name="navigation_tap">Tap</string>
+    <string name="navigation_double">Double tap</string>
+    <string name="navigation_hold">Hold</string>
+    <string name="navigation_none">No action</string>
+    <string name="navigation_home">Home</string>
+    <string name="navigation_back">Back</string>
+    <string name="navigation_recents">Recent apps</string>
+    <string name="navigation_menu">Quick actions</string>
+    <string name="navigation_quick_mute">Toggle mute</string>
+    <string name="navigation_quick_hud">Toggle HUD</string>
+    <string name="navigation_quick_pin">Pin HUD</string>
+    <string name="navigation_quick_unpin">Unpin HUD</string>
+    <string name="navigation_quick_cycle">Cycle HUD layout</string>
+    <string name="navigation_quick_hint">Press a shortcut button or tap an action. B closes the panel.</string>
+    <string name="navigation_key_a">A</string>
+    <string name="navigation_key_b">B</string>
+    <string name="navigation_key_x">X</string>
+    <string name="navigation_key_y">Y</string>
+    <string name="navigation_key_r1">R1</string>
+    <string name="navigation_key_r2">R2</string>
+    <string name="navigation_key_l1">L1</string>
+    <string name="navigation_key_l2">L2</string>
+    <string name="navigation_fan_mode">Fan mode</string>
+    <string name="navigation_performance_mode">Performance profile</string>
+    <string name="navigation_fan_off">Off</string>
+    <string name="navigation_fan_quiet">Quiet</string>
+    <string name="navigation_fan_smart">Smart</string>
+    <string name="navigation_fan_sport">Sport</string>
+    <string name="navigation_fan_custom">Custom</string>
+    <string name="navigation_performance_standard">Standard</string>
+    <string name="navigation_performance_performance">Performance</string>
+    <string name="navigation_performance_high">High Performance</string>
+    <string name="navigation_mode_hint">Press the button shown or tap a mode. B goes back.</string>
+    <string name="navigation_mode_unavailable">These controls require Retroid Pocket 6 firmware.</string>
+    <string name="navigation_mode_permission">Enable Allow brightness changes in Pocket Overlay Settings to change system modes.</string>
+    <string name="navigation_mode_write_failed">The Retroid firmware couldn’t apply this mode.</string>
+    <string name="navigation_key_start">Start</string>
+    <string name="navigation_key_left">←</string>
+    <string name="navigation_key_right">→</string>
+    <string name="navigation_previous">Previous</string>
+    <string name="navigation_next">Next</string>
+    <string name="navigation_back_to_launcher">Back to launcher</string>
+    <string name="navigation_open_app">Open app</string>
+    <string name="navigation_dismiss_app">Close app</string>
+    <string name="navigation_screenshot">Screenshot</string>
+    <string name="navigation_mute">Mute or unmute media</string>
+    <string name="navigation_cluster_tune">ClusterTune profile picker</string>
+    <string name="navigation_cluster_tune_missing">ClusterTune edge handle unavailable. Enable Left-edge profile picker in ClusterTune settings.</string>
+    <string name="navigation_quick_settings">Quick Settings</string>
     <string name="performance_page">Performance</string>
     <string name="performance_intro">Keep live device stats visible while you play.</string>
     <string name="performance_display">Display</string>
     <string name="performance_enable">Show performance overlay</string>
     <string name="performance_position">Reset position</string>
-    <string name="performance_custom_position">Custom position</string>
     <string name="performance_pin">Pin</string>
     <string name="performance_preview">Live HUD preview</string>
     <string name="performance_preview_empty">Select a metric to preview the HUD.</string>
     <string name="performance_ram_format">RAM display</string>
     <string-array name="performance_ram_formats">
-        <item>Percentage</item>
-        <item>Used / total (GiB)</item>
-        <item>Used only (GiB)</item>
+        <item>Percentage Only</item>
+        <item>Used Only</item>
+        <item>Used / Total (GiB)</item>
     </string-array>
+    <string name="performance_fan_format">Fan display</string>
+    <string-array name="performance_fan_formats">
+        <item>Percentage Only</item>
+        <item>RPM</item>
+        <item>Percentage / RPM</item>
+    </string-array>
+    <string name="performance_fan_combined">%1$s / %2$s</string>
+    <string name="performance_rpm">%1$d RPM</string>
     <string name="performance_ram_used_gib">%1$.1f GiB</string>
     <string name="performance_ram_gib">%1$.1f / %2$.1f GiB</string>
     <string name="performance_default">Reset to default</string>
@@ -61,12 +126,17 @@
     <string name="metric_refresh">Display refresh rate</string>
     <string name="performance_degrees">%1$.1f °C</string>
     <string name="performance_watts">%1$+.2f W</string>
+    <string name="performance_cpu_core">CPU%1$d</string>
+    <string name="performance_core_values">" %1$4s  %2$8s"</string>
+    <string name="performance_mhz">%1$d MHz</string>
     <string name="performance_hertz">%1$d Hz</string>
     <string name="performance_percent">%1$d%%</string>
-    <string name="metric_battery_time">Battery time left</string>
+    <string name="metric_battery_time">Battery time</string>
     <string name="metric_fan">Fan speed</string>
     <string name="performance_batt">Batt</string>
     <string name="performance_fan">FAN</string>
+    <string name="performance_charge_time">~%1$dh %2$02dm to full</string>
+    <string name="performance_battery_full">Full</string>
     <string name="performance_runtime">~%1$dh %2$02dm</string>
     <string name="settings_page">Settings</string>
     <string name="settings_intro">Choose an app theme and manage the permissions for controller shortcuts.</string>
@@ -77,6 +147,11 @@
     <string name="preview_time">10:42</string>
     <string name="appearance_section">Appearance</string>
     <string name="overlay_size">Overlay size</string>
+    <string name="overlay_battery_icon">Battery icon</string>
+    <string name="overlay_battery_percentage">Percentage inside icon</string>
+    <string name="overlay_battery_fill">Colored battery fill</string>
+    <string name="overlay_charging_indicator">Charging indicator</string>
+    <string name="battery_percentage_value">%1$d%%</string>
     <string name="slide_animation">Slide animation</string>
     <string name="slide_in_time">Slide in duration</string>
     <string name="slide_out_time">Slide out duration</string>

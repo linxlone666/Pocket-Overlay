@@ -1,8 +1,8 @@
 package app.pocketoverlay;
 
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.graphics.Canvas;
-import android.graphics.CornerPathEffect;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.Typeface;
@@ -22,13 +22,14 @@ final class OverlayView extends View {
 
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Path symbol = new Path();
-    private final CornerPathEffect starCorners = new CornerPathEffect(3f);
     private boolean brightness;
     private float level;
     private int segments;
     private String time;
     private int batteryPercent;
-    private boolean charging;
+    private boolean showChargingIndicator;
+    private boolean showBatteryFill;
+    private String batteryLabel;
     private int panelColor;
     private int trackColor;
     private int brightnessColor;
@@ -83,13 +84,17 @@ final class OverlayView extends View {
     }
 
     void update(boolean brightness, float level, int segments, String time,
-            int batteryPercent, boolean charging) {
+            int batteryPercent, boolean charging, SharedPreferences settings) {
         this.brightness = brightness;
         this.level = Math.max(0f, Math.min(1f, level));
         this.segments = segments;
         this.time = time;
         this.batteryPercent = batteryPercent;
-        this.charging = charging;
+        showChargingIndicator = charging && settings.getBoolean(OverlaySettings.OVERLAY_CHARGING_INDICATOR, true);
+        showBatteryFill = settings.getBoolean(OverlaySettings.OVERLAY_BATTERY_FILL, true);
+        boolean showBatteryPercent = settings.getBoolean(OverlaySettings.OVERLAY_BATTERY_PERCENT, false);
+        batteryLabel = showBatteryPercent && batteryPercent >= 0 && batteryPercent <= 100
+                ? getContext().getString(R.string.battery_percentage_value, batteryPercent) : null;
         invalidate();
     }
 
@@ -133,40 +138,51 @@ final class OverlayView extends View {
     }
 
     private void drawMeterIcon(Canvas canvas) {
+        if (brightness) {
+            drawSun(canvas);
+            return;
+        }
+
         symbol.reset();
-        if (brightness) {
-            for (int point = 0; point < 10; point++) {
-                double angle = point * Math.PI / 5 - Math.PI / 2;
-                float radius = point % 2 == 0 ? 20f : 11f;
-                float x = 59f + radius * (float) Math.cos(angle);
-                float y = 50f + radius * (float) Math.sin(angle);
-                if (point == 0) {
-                    symbol.moveTo(x, y);
-                } else {
-                    symbol.lineTo(x, y);
-                }
-            }
-        } else {
-            symbol.moveTo(43, 43);
-            symbol.lineTo(50, 43);
-            symbol.lineTo(61, 33);
-            symbol.lineTo(61, 67);
-            symbol.lineTo(50, 57);
-            symbol.lineTo(43, 57);
-        }
+        symbol.moveTo(38, 43);
+        symbol.lineTo(45, 43);
+        symbol.lineTo(56, 33);
+        symbol.lineTo(56, 67);
+        symbol.lineTo(45, 57);
+        symbol.lineTo(38, 57);
         symbol.close();
-        if (brightness) {
-            paint.setPathEffect(starCorners);
-        }
         canvas.drawPath(symbol, paint);
-        paint.setPathEffect(null);
-        if (!brightness && level > 0) {
+
+        paint.setStrokeWidth(3f);
+        paint.setStrokeCap(Paint.Cap.ROUND);
+        if (level == 0f) {
+            canvas.drawLine(64, 45, 74, 55, paint);
+            canvas.drawLine(64, 55, 74, 45, paint);
+        } else {
             paint.setStyle(Paint.Style.STROKE);
-            paint.setStrokeWidth(3f);
-            canvas.drawArc(57, 41, 72, 59, -60, 120, false, paint);
-            canvas.drawArc(54, 33, 81, 67, -53, 106, false, paint);
+            int waves = (int) Math.ceil(level * 3);
+            for (int wave = 0; wave < waves; wave++) {
+                float radius = 10f + 7f * wave;
+                canvas.drawArc(55 - radius, 50 - radius, 55 + radius, 50 + radius,
+                        -47, 94, false, paint);
+            }
             paint.setStyle(Paint.Style.FILL);
         }
+        paint.setStrokeCap(Paint.Cap.BUTT);
+    }
+
+    private void drawSun(Canvas canvas) {
+        float radius = 8f + 4f * level;
+        canvas.drawCircle(59, 50, radius, paint);
+        paint.setStrokeWidth(3f);
+        paint.setStrokeCap(Paint.Cap.ROUND);
+        canvas.save();
+        for (int ray = 0; ray < 8; ray++) {
+            canvas.drawLine(59, 50 - radius - 4, 59, 50 - radius - 7 - 4 * level, paint);
+            canvas.rotate(45, 59, 50);
+        }
+        canvas.restore();
+        paint.setStrokeCap(Paint.Cap.BUTT);
     }
 
     private void drawBattery(Canvas canvas, float left) {
@@ -179,22 +195,47 @@ final class OverlayView extends View {
         paint.setStyle(Paint.Style.FILL);
         canvas.drawRoundRect(70, 43, 75, 57, 2, 2, paint);
 
-        if (batteryPercent > 0 && batteryPercent <= 100) {
+        boolean filled = showBatteryFill && batteryPercent > 0 && batteryPercent <= 100;
+        if (filled) {
             paint.setColor(batteryColor);
-            canvas.drawRoundRect(6, 37, 6 + 56f * batteryPercent / 100f, 63, 4, 4, paint);
+            canvas.drawRoundRect(5, 35, 5 + 58f * batteryPercent / 100f, 65, 4, 4, paint);
         }
-        if (charging) {
+        if (batteryLabel != null) {
+            drawBatteryLabel(canvas, filled);
+        }
+        if (showChargingIndicator) {
             paint.setColor(volumeColor);
             symbol.reset();
-            symbol.moveTo(39, 35);
-            symbol.lineTo(26, 52);
-            symbol.lineTo(33, 52);
-            symbol.lineTo(30, 65);
-            symbol.lineTo(44, 46);
-            symbol.lineTo(37, 46);
+            symbol.moveTo(94, 37);
+            symbol.lineTo(81, 52);
+            symbol.lineTo(88, 52);
+            symbol.lineTo(85, 63);
+            symbol.lineTo(99, 47);
+            symbol.lineTo(92, 47);
             symbol.close();
             canvas.drawPath(symbol, paint);
         }
         canvas.restore();
+    }
+
+    private void drawBatteryLabel(Canvas canvas, boolean filled) {
+        paint.setTextSize(24f);
+        float textWidth = paint.measureText(batteryLabel);
+        float textScale = Math.min(1f, 58f / textWidth);
+        paint.setTextScaleX(textScale);
+        float left = (68f - textWidth * textScale) / 2f;
+        float baseline = HEIGHT / 2f - (paint.ascent() + paint.descent()) / 2f;
+        if (filled) {
+            // Keep the text legible where it crosses the boundary of the colored fill.
+            paint.setColor(panelColor | 0xff000000);
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(3f);
+            canvas.drawText(batteryLabel, left, baseline, paint);
+            paint.setStyle(Paint.Style.FILL);
+        }
+        paint.setColor(statusColor);
+        canvas.drawText(batteryLabel, left, baseline, paint);
+        paint.setTextScaleX(1f);
+        paint.setTextSize(33f);
     }
 }

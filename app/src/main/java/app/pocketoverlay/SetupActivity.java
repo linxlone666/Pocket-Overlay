@@ -3,6 +3,7 @@ package app.pocketoverlay;
 import android.accessibilityservice.AccessibilityServiceInfo;
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.ActivityNotFoundException;
 import android.content.ComponentName;
 import android.content.DialogInterface;
 import android.content.Intent;
@@ -28,6 +29,7 @@ import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
+import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.SeekBar;
@@ -40,19 +42,22 @@ import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.IntConsumer;
 
 import app.pocketoverlay.OverlaySettings.Binding;
 
 public final class SetupActivity extends Activity {
     static boolean visible;
     private static final String SELECTED_PAGE = "selected_page";
-    private enum Page { OVERLAY, PERFORMANCE, SETTINGS }
+    private enum Page { OVERLAY, PERFORMANCE, SETTINGS, NAVIGATION }
     private int background, sidebarColor, surface, accent, textColor, muted, selection;
     private SharedPreferences settings;
     private LinearLayout content;
     private ScrollView scroll;
     private TextView overlayTab;
     private TextView performanceTab;
+    private TextView navigationTab;
+    private Button homeProtection;
     private TextView settingsTab;
     private Page page;
     private boolean darkTheme;
@@ -63,6 +68,7 @@ public final class SetupActivity extends Activity {
     private Button permissionsPrompt;
     private Switch performanceEnabled;
     private Button[] performanceLayouts;
+    private Button performancePin;
     private PerformanceStatus performanceStatus;
     private final SharedPreferences.OnSharedPreferenceChangeListener performanceState = (prefs, key) -> {
         if (performanceStatus != null && key != null && key.startsWith("performance_")) {
@@ -73,6 +79,9 @@ public final class SetupActivity extends Activity {
             for (int i = 0; i < performanceLayouts.length; i++) {
                 performanceLayouts[i].setSelected(i == layout);
             }
+        }
+        if (OverlaySettings.PERFORMANCE_LOCKED.equals(key) && performancePin != null) {
+            performancePin.setSelected(prefs.getBoolean(key, false));
         }
         if (OverlaySettings.PERFORMANCE_ENABLED.equals(key) && performanceEnabled != null) {
             performanceEnabled.setChecked(prefs.getBoolean(key, false));
@@ -153,17 +162,21 @@ public final class SetupActivity extends Activity {
         content.removeAllViews();
         bindingButtons.clear();
         performanceEnabled = null;
+        performancePin = null;
+        homeProtection = null;
         performanceLayouts = null;
         shortcutPermission = null;
         brightnessPermission = null;
         permissionsPrompt = null;
         overlayTab.setSelected(page == Page.OVERLAY);
         performanceTab.setSelected(page == Page.PERFORMANCE);
+        navigationTab.setSelected(page == Page.NAVIGATION);
         settingsTab.setSelected(page == Page.SETTINGS);
         switch (page) {
             case OVERLAY: createOverlayPage(); break;
             case PERFORMANCE: createPerformancePage(); break;
             case SETTINGS: createSettingsPage(); break;
+            case NAVIGATION: createNavigationPage(); break;
         }
         updatePermissions();
         scroll.scrollTo(0, 0);
@@ -185,6 +198,13 @@ public final class SetupActivity extends Activity {
         Runnable brightnessPreview = addPreview(previews, true, 20, 0.65f);
 
         addText(R.string.appearance_section, 16, accent, true, 20);
+        Button batteryIcon = createControl();
+        batteryIcon.setText(R.string.overlay_battery_icon);
+        batteryIcon.setOnClickListener(view -> showBatteryIconOptions(() -> {
+            volumePreview.run();
+            brightnessPreview.run();
+        }));
+        addRow(batteryIcon, 6);
         Switch slide = addToggle(R.string.slide_animation, OverlaySettings.SLIDE);
         TileGrid appearance = new TileGrid();
         addChoice(appearance, R.string.overlay_size, OverlaySettings.SIZE, OverlaySettings.DEFAULT_SIZE,
@@ -242,14 +262,11 @@ public final class SetupActivity extends Activity {
 
         LinearLayout choices = new LinearLayout(this);
         addRow(choices, 12);
-        Button pin = performanceButton(R.string.performance_pin);
-        pin.setSelected(settings.getBoolean(OverlaySettings.PERFORMANCE_LOCKED, false));
-        pin.setOnClickListener(view -> {
-            boolean pinned = !pin.isSelected();
-            settings.edit().putBoolean(OverlaySettings.PERFORMANCE_LOCKED, pinned).apply();
-            pin.setSelected(pinned);
-        });
-        addEqual(choices, pin);
+        performancePin = performanceButton(R.string.performance_pin);
+        performancePin.setSelected(settings.getBoolean(OverlaySettings.PERFORMANCE_LOCKED, false));
+        performancePin.setOnClickListener(view -> settings.edit()
+                .putBoolean(OverlaySettings.PERFORMANCE_LOCKED, !view.isSelected()).apply());
+        addEqual(choices, performancePin);
         int[] labels = {R.string.performance_inline, R.string.performance_list, R.string.performance_full_list};
         performanceLayouts = new Button[labels.length];
         int current = settings.getInt(OverlaySettings.PERFORMANCE_LAYOUT, OverlaySettings.PERFORMANCE_LIST);
@@ -298,24 +315,33 @@ public final class SetupActivity extends Activity {
         }
 
         controls.addView(label(R.string.performance_metrics_section, 15, textColor, true));
-        LinearLayout visual = new LinearLayout(this);
-        controls.addView(visual);
-        Button background = performanceButton(R.string.performance_background);
-        background.setOnClickListener(view -> showPerformanceSlider(true));
-        addEqual(visual, background);
-        Button scale = performanceButton(R.string.performance_scale);
-        scale.setOnClickListener(view -> showPerformanceSlider(false));
-        addEqual(visual, scale);
-        Button order = performanceButton(R.string.performance_order);
-        order.setOnClickListener(view -> showPerformanceOrder());
-        addEqual(visual, order);
+        LinearLayout appearance = new LinearLayout(this);
+        addEqual(appearance, performanceOption(R.string.performance_background, () -> showPerformanceSlider(true)));
+        addEqual(appearance, performanceOption(R.string.performance_scale, () -> showPerformanceSlider(false)));
+        LinearLayout.LayoutParams appearanceLayout = new LinearLayout.LayoutParams(-1, -2);
+        appearanceLayout.topMargin = dp(6);
+        controls.addView(appearance, appearanceLayout);
+        LinearLayout arrangement = new LinearLayout(this);
+        addEqual(arrangement, performanceOption(R.string.performance_order, this::showPerformanceOrder));
+        addEqual(arrangement, performanceOption(R.string.performance_position, this::showPerformancePosition));
+        LinearLayout.LayoutParams arrangementLayout = new LinearLayout.LayoutParams(-1, -2);
+        arrangementLayout.topMargin = dp(6);
+        controls.addView(arrangement, arrangementLayout);
 
         EnumMap<PerformanceMetric, CheckBox> toggles = new EnumMap<>(PerformanceMetric.class);
         EnumMap<PerformancePreset, View> presets = new EnumMap<>(PerformancePreset.class);
         int selected = settings.getInt(OverlaySettings.PERFORMANCE_METRICS, PerformanceMetric.DEFAULT);
         LinearLayout row = null;
         int index = 0;
-        for (PerformanceMetric metric : PerformanceMetric.values()) {
+        PerformanceMetric[] metricOptions = {
+                PerformanceMetric.FPS, PerformanceMetric.REFRESH_RATE,
+                PerformanceMetric.CPU, PerformanceMetric.CPU_TEMPERATURE,
+                PerformanceMetric.GPU, PerformanceMetric.GPU_TEMPERATURE,
+                PerformanceMetric.MEMORY, PerformanceMetric.FAN,
+                PerformanceMetric.BATTERY, PerformanceMetric.BATTERY_TEMPERATURE,
+                PerformanceMetric.POWER, PerformanceMetric.BATTERY_TIME
+        };
+        for (PerformanceMetric metric : metricOptions) {
             if (index++ % 2 == 0) {
                 row = new LinearLayout(this);
                 controls.addView(row);
@@ -327,7 +353,15 @@ public final class SetupActivity extends Activity {
             toggle.setMinHeight(dp(34));
             toggle.setMinimumHeight(dp(34));
             toggle.setChecked(metric.selected(selected));
-            addEqual(row, toggle);
+            LinearLayout option = new LinearLayout(this);
+            option.setGravity(Gravity.CENTER_VERTICAL);
+            option.addView(toggle, new LinearLayout.LayoutParams(0, -2, 1));
+            if (metric == PerformanceMetric.MEMORY) {
+                addPerformanceGear(option, R.string.performance_ram_format, this::showRamFormat);
+            } else if (metric == PerformanceMetric.FAN) {
+                addPerformanceGear(option, R.string.performance_fan_format, this::showFanFormat);
+            }
+            addEqual(row, option);
             toggles.put(metric, toggle);
             toggle.setOnCheckedChangeListener((button, checked) -> {
                 int mask = settings.getInt(OverlaySettings.PERFORMANCE_METRICS, PerformanceMetric.DEFAULT);
@@ -338,20 +372,6 @@ public final class SetupActivity extends Activity {
                 }
             });
         }
-        Button ramFormat = performanceButton(R.string.performance_ram_format);
-        updateRamFormat(ramFormat);
-        ramFormat.setOnClickListener(view -> new AlertDialog.Builder(this)
-                .setTitle(R.string.performance_ram_format)
-                .setSingleChoiceItems(getResources().getStringArray(R.array.performance_ram_formats),
-                        OverlaySettings.ramFormat(settings),
-                        (dialog, choice) -> {
-                            settings.edit().putInt(OverlaySettings.PERFORMANCE_RAM_FORMAT, choice).apply();
-                            updateRamFormat(ramFormat);
-                            dialog.dismiss();
-                        })
-                .setNegativeButton(android.R.string.cancel, null)
-                .show());
-        controls.addView(ramFormat);
         createStatusCards(status, preview);
 
         addText(R.string.performance_presets, 16, accent, true, 16);
@@ -370,14 +390,6 @@ public final class SetupActivity extends Activity {
         selectPerformancePreset(presets, selected);
 
         addText(R.string.performance_drag_hint, 13, muted, false, 10);
-        TileGrid tools = new TileGrid();
-        Button position = addChoice(tools, R.string.performance_position, OverlaySettings.PERFORMANCE_POSITION,
-                OverlaySettings.PERFORMANCE_DEFAULT_POSITION, new int[]{0, 1, 2, 3},
-                getResources().getStringArray(R.array.performance_positions), () -> settings.edit()
-                        .remove(OverlaySettings.PERFORMANCE_X).remove(OverlaySettings.PERFORMANCE_Y).apply());
-        if (settings.contains(OverlaySettings.PERFORMANCE_X) || settings.contains(OverlaySettings.PERFORMANCE_Y)) {
-            setChoiceLabel(position, R.string.performance_position, getString(R.string.performance_custom_position));
-        }
         addText(R.string.shortcuts_section, 16, accent, true, 16);
         TileGrid shortcuts = new TileGrid();
         bindTile(addTile(shortcuts), Binding.PERFORMANCE);
@@ -412,40 +424,104 @@ public final class SetupActivity extends Activity {
         row.addView(child, params);
     }
 
-    private void updateRamFormat(Button button) {
-        String[] formats = getResources().getStringArray(R.array.performance_ram_formats);
-        setChoiceLabel(button, R.string.performance_ram_format, formats[OverlaySettings.ramFormat(settings)]);
+    private Button performanceOption(int title, Runnable onClick) {
+        Button button = performanceButton(title);
+        button.setOnClickListener(view -> onClick.run());
+        return button;
+    }
+
+    private void addPerformanceGear(LinearLayout row, int title, Runnable onClick) {
+        ImageButton gear = new ImageButton(this);
+        gear.setImageResource(R.drawable.ic_settings);
+        gear.setColorFilter(accent);
+        gear.setContentDescription(getText(title));
+        gear.setBackground(controlBackground(true));
+        gear.setOnClickListener(view -> onClick.run());
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(40), dp(40));
+        params.setMarginStart(dp(4));
+        params.topMargin = dp(3);
+        params.bottomMargin = dp(3);
+        row.addView(gear, params);
+    }
+
+    private void showRamFormat() {
+        int[] formats = {OverlaySettings.RAM_PERCENTAGE, OverlaySettings.RAM_USED_ONLY,
+                OverlaySettings.RAM_USED_TOTAL};
+        showPerformanceChoice(R.string.performance_ram_format, R.array.performance_ram_formats,
+                choiceIndex(OverlaySettings.ramFormat(settings), formats),
+                choice -> settings.edit().putInt(OverlaySettings.PERFORMANCE_RAM_FORMAT, formats[choice]).apply());
+    }
+
+    private void showFanFormat() {
+        showPerformanceChoice(R.string.performance_fan_format, R.array.performance_fan_formats,
+                OverlaySettings.fanFormat(settings),
+                choice -> settings.edit().putInt(OverlaySettings.PERFORMANCE_FAN_FORMAT, choice).apply());
+    }
+
+    private void showPerformancePosition() {
+        boolean dragged = settings.contains(OverlaySettings.PERFORMANCE_X) || settings.contains(OverlaySettings.PERFORMANCE_Y);
+        int selected = dragged ? -1 : settings.getInt(OverlaySettings.PERFORMANCE_POSITION,
+                OverlaySettings.PERFORMANCE_DEFAULT_POSITION);
+        showPerformanceChoice(R.string.performance_position, R.array.performance_positions, selected,
+                choice -> settings.edit().putInt(OverlaySettings.PERFORMANCE_POSITION, choice)
+                        .remove(OverlaySettings.PERFORMANCE_X).remove(OverlaySettings.PERFORMANCE_Y).apply());
+    }
+
+    private void showPerformanceChoice(int title, int options, int selected, IntConsumer onChoice) {
+        showPerformanceDialog(new AlertDialog.Builder(this)
+                .setTitle(title)
+                .setSingleChoiceItems(options, selected, (dialog, choice) -> {
+                    onChoice.accept(choice);
+                    dialog.dismiss();
+                })
+                .setNegativeButton(android.R.string.cancel, null));
+    }
+
+    private AlertDialog showPerformanceDialog(AlertDialog.Builder builder) {
+        AlertDialog dialog = builder.create();
+        dialog.getWindow().setBackgroundDrawable(rounded(surface, 18));
+        dialog.getWindow().getDecorView().setClipToOutline(true);
+        dialog.show();
+        return dialog;
     }
 
     private void createStatusCards(LinearLayout panel, TextView preview) {
         panel.addView(label(R.string.performance_live_status, 15, textColor, true));
         EnumMap<PerformanceMetric, TextView> values = new EnumMap<>(PerformanceMetric.class);
-        PerformanceMetric[] displayed = {PerformanceMetric.CPU, PerformanceMetric.GPU,
-                PerformanceMetric.POWER, PerformanceMetric.MEMORY,
-                PerformanceMetric.BATTERY, PerformanceMetric.BATTERY_TEMPERATURE,
+        PerformanceMetric[] displayed = {
+                PerformanceMetric.FPS, PerformanceMetric.REFRESH_RATE,
+                PerformanceMetric.CPU, PerformanceMetric.GPU,
                 PerformanceMetric.CPU_TEMPERATURE, PerformanceMetric.GPU_TEMPERATURE,
-                PerformanceMetric.BATTERY_TIME, PerformanceMetric.FAN};
+                PerformanceMetric.MEMORY, PerformanceMetric.FAN,
+                PerformanceMetric.BATTERY, PerformanceMetric.BATTERY_TEMPERATURE,
+                PerformanceMetric.POWER, PerformanceMetric.BATTERY_TIME
+        };
         LinearLayout row = null;
-        for (int i = 0; i < displayed.length; i++) {
-            if (i % 2 == 0) {
+        for (int index = 0; index < displayed.length; index++) {
+            if (index % 2 == 0) {
                 row = new LinearLayout(this);
+                row.setBaselineAligned(false);
                 LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
                 params.topMargin = dp(6);
                 panel.addView(row, params);
             }
-            PerformanceMetric metric = displayed[i];
-            LinearLayout card = new LinearLayout(this);
-            card.setOrientation(LinearLayout.VERTICAL);
-            card.setPadding(dp(9), dp(5), dp(9), dp(5));
-            card.setBackground(rounded(background, 8));
-            card.addView(label(metric.title, 12, PerformanceHud.color(metric, darkTheme), true));
+            PerformanceMetric metric = displayed[index];
+            LinearLayout tile = new LinearLayout(this);
+            tile.setOrientation(LinearLayout.VERTICAL);
+            tile.setPadding(dp(9), dp(5), dp(9), dp(5));
+            tile.setBackground(rounded(background, 8));
+            tile.addView(label(metric.title, 12, PerformanceHud.color(metric, darkTheme), true));
             TextView value = new TextView(this);
             value.setText("—");
             value.setTextColor(textColor);
-            value.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-            value.setTextSize(16);
-            card.addView(value);
-            addEqual(row, card);
+            value.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
+            value.setTextSize(14);
+            tile.addView(value);
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, -1, 1);
+            if (index % 2 != 0) {
+                params.setMarginStart(dp(6));
+            }
+            row.addView(tile, params);
             values.put(metric, value);
         }
         performanceStatus = new PerformanceStatus(this, values, preview);
@@ -519,14 +595,13 @@ public final class SetupActivity extends Activity {
             }
         });
         update.run();
-        AlertDialog dialog = new AlertDialog.Builder(this)
+        AlertDialog dialog = showPerformanceDialog(new AlertDialog.Builder(this)
                 .setTitle(opacity ? R.string.performance_opacity : R.string.performance_scale)
                 .setView(insetDialogContent(options))
                 .setNeutralButton(R.string.performance_default, null)
                 .setNegativeButton(android.R.string.cancel, null)
                 .setPositiveButton(R.string.save, (window, which) ->
-                        settings.edit().putInt(key, min + slider.getProgress()).apply())
-                .show();
+                        settings.edit().putInt(key, min + slider.getProgress()).apply()));
         dialog.getButton(AlertDialog.BUTTON_NEUTRAL)
                 .setOnClickListener(view -> slider.setProgress(defaultValue - min));
     }
@@ -557,14 +632,13 @@ public final class SetupActivity extends Activity {
         options.addView(rows);
         scroller.addView(options);
         renderOrder(rows, groups);
-        new AlertDialog.Builder(this)
+        showPerformanceDialog(new AlertDialog.Builder(this)
                 .setTitle(R.string.performance_order)
                 .setView(insetDialogContent(scroller))
                 .setNegativeButton(android.R.string.cancel, null)
                 .setNeutralButton(R.string.performance_reset_order, (dialog, which) ->
                         settings.edit().remove(OverlaySettings.PERFORMANCE_ORDER).apply())
-                .setPositiveButton(R.string.save, (dialog, which) -> PerformanceGroup.save(settings, groups))
-                .show();
+                .setPositiveButton(R.string.save, (dialog, which) -> PerformanceGroup.save(settings, groups)));
     }
 
     private void renderOrder(LinearLayout rows, List<PerformanceGroup> groups) {
@@ -615,6 +689,96 @@ public final class SetupActivity extends Activity {
 
     private void selectPerformancePreset(EnumMap<PerformancePreset, View> cards, int metrics) {
         cards.forEach((preset, card) -> card.setSelected(preset.metrics == metrics));
+    }
+
+    private void createNavigationPage() {
+        addText(R.string.navigation_page, 28, textColor, true, 0);
+        addText(R.string.navigation_intro, 14, muted, false, 4);
+        permissionsPrompt = addControl();
+        permissionsPrompt.setText(R.string.permissions_prompt);
+        permissionsPrompt.setOnClickListener(view -> showPage(Page.SETTINGS));
+        addToggle(R.string.navigation_enable, NavigationShortcuts.ENABLED, false);
+
+        LinearLayout home = addNavigationCard(R.string.navigation_home);
+        addNavigationChoice(home, R.string.navigation_tap, NavigationShortcuts.HOME_TAP, NavigationShortcuts.Action.HOME);
+        addNavigationChoice(home, R.string.navigation_double, NavigationShortcuts.HOME_DOUBLE, NavigationShortcuts.Action.RECENTS);
+        addNavigationChoice(home, R.string.navigation_hold, NavigationShortcuts.HOME_HOLD, NavigationShortcuts.Action.MENU);
+
+        LinearLayout back = addNavigationCard(R.string.navigation_back);
+        addNavigationChoice(back, R.string.navigation_tap, NavigationShortcuts.BACK_TAP, NavigationShortcuts.Action.BACK);
+        addNavigationChoice(back, R.string.navigation_double, NavigationShortcuts.BACK_DOUBLE, NavigationShortcuts.Action.NONE);
+        addNavigationChoice(back, R.string.navigation_hold, NavigationShortcuts.BACK_HOLD, NavigationShortcuts.Action.NONE);
+        addText(R.string.navigation_tap_hint, 13, muted, false, 8);
+
+        if (Settings.System.getInt(getContentResolver(), NavigationShortcuts.RETROID_HOME_PROTECTION, -1) != -1) {
+            homeProtection = addControl();
+            updateHomeProtection();
+            homeProtection.setOnClickListener(view -> openRetroidSettings());
+            addText(R.string.navigation_home_protection_hint, 13, muted, false, 6);
+        }
+    }
+
+    private void openRetroidSettings() {
+        Intent intent = new Intent().setClassName("com.rp.settings", "com.ro.settings.activity.MainSettingsActivity");
+        try {
+            startActivity(intent);
+        } catch (ActivityNotFoundException | SecurityException ignored) {
+            startActivity(new Intent(Settings.ACTION_SETTINGS));
+        }
+    }
+
+    private LinearLayout addNavigationCard(int title) {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(12), dp(10), dp(12), dp(12));
+        card.setBackground(rounded(sidebarColor, 14));
+        card.addView(label(title, 16, accent, true), new LinearLayout.LayoutParams(-1, -2));
+
+        LinearLayout choices = new LinearLayout(this);
+        boolean wide = getResources().getConfiguration().screenWidthDp >= 720;
+        choices.setOrientation(wide ? LinearLayout.HORIZONTAL : LinearLayout.VERTICAL);
+        choices.setBaselineAligned(false);
+        LinearLayout.LayoutParams choicesLayout = new LinearLayout.LayoutParams(-1, -2);
+        choicesLayout.topMargin = dp(8);
+        card.addView(choices, choicesLayout);
+        addRow(card, 10);
+        return choices;
+    }
+
+    private void updateHomeProtection() {
+        if (homeProtection != null) {
+            int protection = Settings.System.getInt(getContentResolver(), NavigationShortcuts.RETROID_HOME_PROTECTION, -1);
+            int status = protection < 0 ? R.string.navigation_home_protection_unavailable
+                    : protection == 0 ? R.string.navigation_home_protection_off : R.string.navigation_home_protection_on;
+            setChoiceLabel(homeProtection, R.string.navigation_home_protection, getString(status));
+        }
+    }
+
+    private void addNavigationChoice(LinearLayout choices, int title, String key, NavigationShortcuts.Action fallback) {
+        NavigationShortcuts.Action[] actions = NavigationShortcuts.Action.values();
+        int[] values = new int[actions.length];
+        String[] labels = new String[actions.length];
+        for (int i = 0; i < actions.length; i++) {
+            values[i] = i;
+            labels[i] = getString(actions[i].label);
+        }
+        Button button = createControl();
+        button.setTextSize(14);
+        button.setMinHeight(dp(58));
+        button.setBackground(controlBackground(true));
+        boolean horizontal = choices.getOrientation() == LinearLayout.HORIZONTAL;
+        LinearLayout.LayoutParams layout = horizontal
+                ? new LinearLayout.LayoutParams(0, -1, 1)
+                : new LinearLayout.LayoutParams(-1, -2);
+        if (choices.getChildCount() > 0) {
+            if (horizontal) {
+                layout.setMarginStart(dp(8));
+            } else {
+                layout.topMargin = dp(6);
+            }
+        }
+        choices.addView(button, layout);
+        configureChoice(button, title, key, fallback.ordinal(), values, labels, null);
     }
 
     private void createSettingsPage() {
@@ -674,6 +838,7 @@ public final class SetupActivity extends Activity {
 
         overlayTab = addTab(sidebar, R.string.overlay_page, Page.OVERLAY);
         performanceTab = addTab(sidebar, R.string.performance_page, Page.PERFORMANCE);
+        navigationTab = addTab(sidebar, R.string.navigation_page, Page.NAVIGATION);
         sidebar.addView(new Space(this), new LinearLayout.LayoutParams(1, 0, 1));
         settingsTab = addTab(sidebar, R.string.settings_page, Page.SETTINGS);
         return sidebar;
@@ -695,17 +860,35 @@ public final class SetupActivity extends Activity {
         return tab;
     }
 
+    private void showBatteryIconOptions(Runnable refreshPreview) {
+        String[] keys = {OverlaySettings.OVERLAY_BATTERY_PERCENT, OverlaySettings.OVERLAY_BATTERY_FILL,
+                OverlaySettings.OVERLAY_CHARGING_INDICATOR};
+        CharSequence[] labels = {getText(R.string.overlay_battery_percentage),
+                getText(R.string.overlay_battery_fill), getText(R.string.overlay_charging_indicator)};
+        boolean[] checked = {settings.getBoolean(keys[0], false), settings.getBoolean(keys[1], true),
+                settings.getBoolean(keys[2], true)};
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.overlay_battery_icon)
+                .setMultiChoiceItems(labels, checked, (dialog, index, enabled) -> {
+                    settings.edit().putBoolean(keys[index], enabled).apply();
+                    refreshPreview.run();
+                })
+                .setPositiveButton(android.R.string.ok, null)
+                .show();
+    }
+
     private Runnable addPreview(LinearLayout previews, boolean brightness, int steps, float level) {
         FrameLayout frame = new FrameLayout(this);
         previews.addView(frame, new LinearLayout.LayoutParams(-1, dp(60)));
         OverlayView preview = new OverlayView(this);
         preview.applyTheme(settings.getInt(OverlaySettings.THEME, OverlaySettings.DARK));
-        preview.update(brightness, level, steps, getString(R.string.preview_time), 68, false);
+
         frame.addView(preview, new FrameLayout.LayoutParams(0, 0, Gravity.CENTER));
         Runnable resize = () -> {
             float density = (float) getResources().getDisplayMetrics().densityDpi
                     / OverlayView.REFERENCE_DENSITY_DPI;
             int size = settings.getInt(OverlaySettings.SIZE, OverlaySettings.DEFAULT_SIZE);
+            preview.update(brightness, level, steps, getString(R.string.preview_time), 68, brightness, settings);
             int width = Math.min(frame.getWidth(), Math.round(preview.designWidth() * density * size / 100f));
             int height = Math.round(width * OverlayView.HEIGHT / preview.designWidth());
             FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) preview.getLayoutParams();
@@ -746,6 +929,12 @@ public final class SetupActivity extends Activity {
     private Button addChoice(TileGrid grid, int title, String key, int defaultValue, int[] values,
             String[] labels, Runnable onChange) {
         Button button = addTile(grid);
+        configureChoice(button, title, key, defaultValue, values, labels, onChange);
+        return button;
+    }
+
+    private void configureChoice(Button button, int title, String key, int defaultValue, int[] values,
+            String[] labels, Runnable onChange) {
         int selected = choiceIndex(settings.getInt(key, defaultValue), values);
         setChoiceLabel(button, title, labels[selected]);
         button.setOnClickListener(view -> new AlertDialog.Builder(this)
@@ -761,7 +950,6 @@ public final class SetupActivity extends Activity {
                         })
                 .setNegativeButton(android.R.string.cancel, null)
                 .show());
-        return button;
     }
 
     private final class TileGrid {
@@ -1038,6 +1226,7 @@ public final class SetupActivity extends Activity {
             performanceStatus.setVisible(true);
         }
         updatePermissions();
+        updateHomeProtection();
     }
 
     @Override

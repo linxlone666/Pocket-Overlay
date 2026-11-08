@@ -105,6 +105,7 @@ final class PerformanceOverlay implements SharedPreferences.OnSharedPreferenceCh
         if (OverlaySettings.PERFORMANCE_ENABLED.equals(key)
                 || OverlaySettings.PERFORMANCE_POSITION.equals(key)
                 || OverlaySettings.PERFORMANCE_RAM_FORMAT.equals(key)
+                || OverlaySettings.PERFORMANCE_FAN_FORMAT.equals(key)
                 || OverlaySettings.PERFORMANCE_ORDER.equals(key)
                 || OverlaySettings.PERFORMANCE_OPACITY.equals(key)
                 || OverlaySettings.PERFORMANCE_SCALE.equals(key)
@@ -132,7 +133,15 @@ final class PerformanceOverlay implements SharedPreferences.OnSharedPreferenceCh
             handler.postDelayed(refresh, UPDATE_INTERVAL_MS);
             return;
         }
-        sampleStats(metrics & PerformanceMetric.SAMPLED);
+        boolean fullList = settings.getInt(OverlaySettings.PERFORMANCE_LAYOUT, OverlaySettings.PERFORMANCE_LIST)
+                == OverlaySettings.PERFORMANCE_FULL_LIST;
+        sampleStats(metrics & PerformanceMetric.SAMPLED, fullList);
+        // Wait for the core list before showing a Full list HUD for the first time.
+        if (panel == null && fullList && PerformanceMetric.CPU.selected(metrics)
+                && !sampledReadings.containsKey(PerformanceStats.CPU_CORE_IDS)) {
+            handler.postDelayed(refresh, UPDATE_INTERVAL_MS);
+            return;
+        }
         if (panel == null) {
             panel = new TextView(context);
             panel.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
@@ -158,13 +167,14 @@ final class PerformanceOverlay implements SharedPreferences.OnSharedPreferenceCh
         return settings.getInt(OverlaySettings.PERFORMANCE_METRICS, PerformanceMetric.DEFAULT);
     }
 
-    private void sampleStats(int metrics) {
+    private void sampleStats(int metrics, boolean fullList) {
         if (sampling || metrics == 0) {
             return;
         }
         sampling = true;
+        boolean readFanRpm = OverlaySettings.fanFormat(settings) != OverlaySettings.FAN_PERCENTAGE;
         worker.execute(() -> {
-            Bundle latest = localStats.sample(metrics);
+            Bundle latest = localStats.sample(metrics, fullList, readFanRpm);
             handler.post(() -> {
                 sampling = false;
                 if (panel != null) {
@@ -173,6 +183,9 @@ final class PerformanceOverlay implements SharedPreferences.OnSharedPreferenceCh
                         render(selectedMetrics());
                         updatePlacement();
                     }
+                } else if (latest.containsKey(PerformanceStats.CPU_CORE_IDS)) {
+                    sampledReadings = latest;
+                    refresh();
                 }
             });
         });

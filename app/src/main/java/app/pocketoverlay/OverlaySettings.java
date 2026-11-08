@@ -8,6 +8,9 @@ import android.view.KeyEvent;
 final class OverlaySettings {
     static final String SIZE = "size_percent";
     private static final String LEGACY_MODIFIER = "modifier_key";
+    static final String OVERLAY_BATTERY_PERCENT = "volume_battery_percent";
+    static final String OVERLAY_BATTERY_FILL = "overlay_battery_fill";
+    static final String OVERLAY_CHARGING_INDICATOR = "overlay_charging_indicator";
     static final String SLIDE = "slide_animation";
     static final String SLIDE_IN = "slide_in_ms";
     static final String SLIDE_OUT = "slide_out_ms";
@@ -18,6 +21,11 @@ final class OverlaySettings {
     static final String THEME = "theme";
     static final String PERFORMANCE_ENABLED = "performance_enabled";
     static final String PERFORMANCE_POSITION = "performance_position";
+    static final String PERFORMANCE_FAN_FORMAT = "performance_fan_format";
+    private static final String LEGACY_FAN_RPM = "performance_fan_rpm";
+    static final int FAN_PERCENTAGE = 0;
+    static final int FAN_RPM_ONLY = 1;
+    static final int FAN_PERCENTAGE_AND_RPM = 2;
     static final String PERFORMANCE_RAM_FORMAT = "performance_ram_format";
     private static final String LEGACY_RAM_AMOUNT = "performance_ram_amount";
     static final int RAM_PERCENTAGE = 0;
@@ -121,6 +129,17 @@ final class OverlaySettings {
 
     static SharedPreferences open(Context context) {
         return context.getSharedPreferences("overlay_settings", Context.MODE_PRIVATE);
+    }
+
+    static void cyclePerformanceLayout(SharedPreferences settings) {
+        int layout = settings.getInt(PERFORMANCE_LAYOUT, PERFORMANCE_LIST);
+        int next = (layout + 1) % (PERFORMANCE_FULL_LIST + 1);
+        settings.edit().putInt(PERFORMANCE_LAYOUT, next).apply();
+    }
+
+    static int fanFormat(SharedPreferences settings) {
+        int previous = settings.getBoolean(LEGACY_FAN_RPM, false) ? FAN_RPM_ONLY : FAN_PERCENTAGE;
+        return settings.getInt(PERFORMANCE_FAN_FORMAT, previous);
     }
 
     static int ramFormat(SharedPreferences settings) {

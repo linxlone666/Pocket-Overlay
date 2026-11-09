@@ -16,8 +16,6 @@ import android.view.InputDevice;
 import android.view.KeyEvent;
 import android.view.WindowManager;
 import android.view.accessibility.AccessibilityEvent;
-import android.view.animation.AccelerateInterpolator;
-import android.view.animation.DecelerateInterpolator;
 import android.widget.FrameLayout;
 import android.widget.Toast;
 
@@ -78,8 +76,13 @@ public final class ShortcutService extends AccessibilityService {
 
     @Override
     protected boolean onKeyEvent(KeyEvent event) {
-        if (navigation != null && navigation.onKeyEvent(event)) {
-            return true;
+        if (navigation != null) {
+            if (navigation.onKeyEvent(event)) {
+                return true;
+            }
+            if (navigation.passesBackToDroidDeck(event)) {
+                return false;
+            }
         }
         PressedKey existing = findPressed(event);
         if (event.getAction() == KeyEvent.ACTION_UP) {
@@ -262,7 +265,7 @@ public final class ShortcutService extends AccessibilityService {
                         | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
                 PixelFormat.TRANSLUCENT);
         layout.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
-        boolean animate = settings.getBoolean(OverlaySettings.SLIDE, true);
+        boolean animate = shouldAnimateOverlay();
         if (alreadyVisible) {
             panel.setLayoutParams(panelLayout);
             windows.updateViewLayout(overlayWindow, layout);
@@ -280,7 +283,7 @@ public final class ShortcutService extends AccessibilityService {
         } else if (!alreadyVisible || slidingOut) {
             slideInTime = settings.getInt(OverlaySettings.SLIDE_IN, OverlaySettings.DEFAULT_SLIDE_IN);
             panel.animate().translationY(0).setDuration(slideInTime)
-                    .setInterpolator(new DecelerateInterpolator()).start();
+                    .setInterpolator(UiMotion.ENTER).start();
         }
         slidingOut = false;
         handler.removeCallbacks(dismiss);
@@ -288,15 +291,19 @@ public final class ShortcutService extends AccessibilityService {
                 OverlaySettings.DISPLAY_TIME, OverlaySettings.DEFAULT_DISPLAY_TIME));
     }
 
+    private boolean shouldAnimateOverlay() {
+        return settings.getBoolean(OverlaySettings.SLIDE, true) && UiMotion.enabled(this);
+    }
+
     private void slideOut() {
-        if (!settings.getBoolean(OverlaySettings.SLIDE, true)) {
+        if (!shouldAnimateOverlay()) {
             hideOverlay();
             return;
         }
         slidingOut = true;
         panel.animate().translationY(-overlayWindow.getHeight()).setDuration(settings.getInt(
                         OverlaySettings.SLIDE_OUT, OverlaySettings.DEFAULT_SLIDE_OUT))
-                .setInterpolator(new AccelerateInterpolator()).withEndAction(this::hideOverlay).start();
+                .setInterpolator(UiMotion.EXIT).withEndAction(this::hideOverlay).start();
     }
 
     private void hideOverlay() {
@@ -310,7 +317,12 @@ public final class ShortcutService extends AccessibilityService {
     }
 
     @Override
-    public void onAccessibilityEvent(AccessibilityEvent event) {}
+    public void onAccessibilityEvent(AccessibilityEvent event) {
+        if (navigation != null && event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+                && event.getContentChangeTypes() == AccessibilityEvent.CONTENT_CHANGE_TYPE_UNDEFINED) {
+            navigation.onWindowChanged(event.getPackageName(), event.getClassName());
+        }
+    }
 
     @Override
     public void onInterrupt() {

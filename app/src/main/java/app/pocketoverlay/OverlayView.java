@@ -1,8 +1,10 @@
 package app.pocketoverlay;
 
+import android.animation.ValueAnimator;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.Typeface;
@@ -24,6 +26,8 @@ final class OverlayView extends View {
     private final Path symbol = new Path();
     private boolean brightness;
     private float level;
+    private float meterFill;
+    private ValueAnimator meterMotion;
     private int segments;
     private String time;
     private int batteryPercent;
@@ -85,8 +89,27 @@ final class OverlayView extends View {
 
     void update(boolean brightness, float level, int segments, String time,
             int batteryPercent, boolean charging, SharedPreferences settings) {
+        boolean sameMeter = this.brightness == brightness && this.segments == segments;
+        float nextLevel = Math.max(0f, Math.min(1f, level));
+        if (!sameMeter || nextLevel != this.level) {
+            if (meterMotion != null) meterMotion.cancel();
+            int filled = Math.round(nextLevel * segments);
+            if (sameMeter && isAttachedToWindow() && UiMotion.enabled(getContext())
+                    && settings.getBoolean(OverlaySettings.SLIDE, true)) {
+                meterMotion = ValueAnimator.ofFloat(meterFill, filled);
+                meterMotion.setDuration(110);
+                meterMotion.setInterpolator(UiMotion.ENTER);
+                meterMotion.addUpdateListener(animation -> {
+                    meterFill = (float) animation.getAnimatedValue();
+                    invalidate();
+                });
+                meterMotion.start();
+            } else {
+                meterFill = filled;
+            }
+        }
         this.brightness = brightness;
-        this.level = Math.max(0f, Math.min(1f, level));
+        this.level = nextLevel;
         this.segments = segments;
         this.time = time;
         this.batteryPercent = batteryPercent;
@@ -107,6 +130,16 @@ final class OverlayView extends View {
     }
 
     @Override
+    protected void onDetachedFromWindow() {
+        if (meterMotion != null) {
+            meterMotion.cancel();
+            meterMotion = null;
+        }
+        meterFill = Math.round(level * segments);
+        super.onDetachedFromWindow();
+    }
+
+    @Override
     protected void onDraw(Canvas canvas) {
         canvas.save();
         float scale = getWidth() / designWidth();
@@ -120,11 +153,18 @@ final class OverlayView extends View {
         int meterColor = brightness ? brightnessColor : volumeColor;
         paint.setColor(meterColor);
         drawMeterIcon(canvas);
-        int filled = Math.round(level * segments);
         for (int index = 0; index < segments; index++) {
-            paint.setColor(index < filled ? meterColor : trackColor);
+            float fill = meterFill - index;
             float x = 100f + SEGMENT_PITCH * index;
-            canvas.drawRoundRect(x, 26, x + 18, 74, 4, 4, paint);
+            if (fill < 1f) {
+                paint.setColor(trackColor);
+                canvas.drawRoundRect(x, 26, x + 18, 74, 4, 4, paint);
+            }
+            if (fill > 0f) {
+                paint.setColor(meterColor);
+                paint.setAlpha(Math.round(Color.alpha(meterColor) * Math.min(fill, 1f)));
+                canvas.drawRoundRect(x, 26, x + 18, 74, 4, 4, paint);
+            }
         }
 
         paint.setColor(statusColor);

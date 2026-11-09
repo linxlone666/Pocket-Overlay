@@ -22,6 +22,7 @@ import android.view.KeyEvent;
 import android.view.ViewConfiguration;
 import android.view.WindowInsets;
 import android.view.WindowManager;
+import android.widget.SeekBar;
 import android.widget.Toast;
 
 import java.util.ArrayDeque;
@@ -76,9 +77,16 @@ final class NavigationShortcuts {
     private final Runnable openRecentsPanel = this::openRecentsPanel;
     private final Set<Integer> consumedPanelKeys = new HashSet<>();
     private NavigationPanel panel;
+    private String droidDeckPackage;
     private boolean recentsPanel;
     private RetroidModePicker modePicker;
+    private StickLighting lighting;
+    private boolean lightingOpen;
     private boolean applyingMode;
+    private SeekBar fanSpeedSlider;
+    private int pendingFanSpeed = -1;
+    private boolean writingFanSpeed;
+    private final Runnable saveFanSpeed = this::saveFanSpeed;
     private boolean sendingGesture;
     private boolean openingRecent;
     private Object clusterTuneRequest;
@@ -95,8 +103,35 @@ final class NavigationShortcuts {
         power = service.getSystemService(PowerManager.class);
         keyguard = service.getSystemService(KeyguardManager.class);
         windows = service.getSystemService(WindowManager.class);
+        if ("Retroid Pocket 6".equals(Build.MODEL)) {
+            lighting = StickLighting.acquire(service, settings, handler);
+        }
         clusterTuneControls = new ClusterTuneControls(handler, this::screenSize,
                 () -> ready() && panel == null, (x, y) -> gesture(x, y, x, y, 45));
+    }
+
+    void onWindowChanged(CharSequence packageName, CharSequence className) {
+        if (packageName == null || className == null) {
+            return;
+        }
+        String owner = packageName.toString();
+        String windowClass = className.toString();
+        // DroidDeck's compatibility builds keep the Activity namespace but use another app ID.
+        if ("com.droiddeck.launcher".equals(owner) || "com.steamdeck.launcher".equals(owner)
+                || windowClass.startsWith("com.droiddeck.launcher.")) {
+            droidDeckPackage = owner;
+            back.cancelPending();
+        } else if (!owner.equals(droidDeckPackage)
+                && !"com.android.systemui".equals(owner)
+                && (!service.getPackageName().equals(owner)
+                        || SetupActivity.class.getName().equals(windowClass))) {
+            droidDeckPackage = null;
+        }
+    }
+
+    boolean passesBackToDroidDeck(KeyEvent event) {
+        return droidDeckPackage != null
+                && (event.getScanCode() == 158 || event.getKeyCode() == KeyEvent.KEYCODE_BACK);
     }
 
     boolean onKeyEvent(KeyEvent event) {
@@ -132,6 +167,9 @@ final class NavigationShortcuts {
             consumedPanelKeys.add(key);
             return true;
         }
+        if (passesBackToDroidDeck(event)) {
+            return false;
+        }
         if ((!isHome && !isBack) || !ready() || panel != null || event.getAction() != KeyEvent.ACTION_DOWN) {
             return false;
         }
@@ -160,6 +198,10 @@ final class NavigationShortcuts {
         home.reset();
         back.reset();
         closePanel();
+        if (lighting != null) {
+            lighting.release();
+            lighting = null;
+        }
         consumedPanelKeys.clear();
     }
 
@@ -210,11 +252,16 @@ final class NavigationShortcuts {
             }
         }
 
-        void reset() {
+        void cancelPending() {
             handler.removeCallbacks(finishTap);
             handler.removeCallbacks(finishHold);
-            down = false;
             waitingForSecond = false;
+            held = down;
+        }
+
+        void reset() {
+            cancelPending();
+            down = false;
         }
     }
 
@@ -322,14 +369,16 @@ final class NavigationShortcuts {
                 new int[]{R.string.navigation_fan_mode, R.string.navigation_performance_mode, R.string.navigation_quick_settings},
                 new Runnable[]{() -> showModePicker(RetroidModePicker.FAN),
                         () -> showModePicker(RetroidModePicker.PERFORMANCE), () -> selectQuick(Action.QUICK_SETTINGS)});
-        quick.addActionRow(new int[]{R.string.navigation_key_r1, R.string.navigation_key_y},
-                new int[]{R.string.navigation_screenshot, R.string.navigation_quick_mute},
-                new Runnable[]{() -> selectQuick(Action.SCREENSHOT), () -> selectQuick(Action.MUTE)});
+        quick.addActionRow(new int[]{R.string.navigation_key_r1, R.string.navigation_key_y, R.string.navigation_key_select},
+                new int[]{R.string.navigation_screenshot, R.string.navigation_quick_mute, R.string.navigation_stick_lighting},
+                new Runnable[]{() -> selectQuick(Action.SCREENSHOT), () -> selectQuick(Action.MUTE), this::showStickLighting});
         presentQuickPanel(quick);
         quick.requestFocus();
     }
 
     private NavigationPanel quickPanel(int title, int detail) {
+        lightingOpen = false;
+        fanSpeedSlider = null;
         if (panel == null) {
             return new NavigationPanel(service, settings, title, detail);
         }
@@ -341,6 +390,8 @@ final class NavigationShortcuts {
         if (panel == null) {
             content.setControls(this::closeOnOutsideTouch, null);
             showPanel(content, false);
+        } else {
+            content.animateContentChange();
         }
     }
 
@@ -349,9 +400,12 @@ final class NavigationShortcuts {
     private static final int[] MODE_KEY_LABELS = {R.string.navigation_key_a, R.string.navigation_key_x,
             R.string.navigation_key_y, R.string.navigation_key_l1, R.string.navigation_key_r1};
 
+    private static final int CUSTOM_FAN_MODE = 6;
+    private static final String FAN_SPEED_SETTING = "fan_speed";
+
     private enum RetroidModePicker {
         FAN("fan_mode", R.string.navigation_fan_mode,
-                new int[]{0, 1, 4, 5, 6},
+                new int[]{0, 1, 4, 5, CUSTOM_FAN_MODE},
                 new int[]{R.string.navigation_fan_off, R.string.navigation_fan_quiet,
                         R.string.navigation_fan_smart, R.string.navigation_fan_sport,
                         R.string.navigation_fan_custom}),
@@ -389,7 +443,9 @@ final class NavigationShortcuts {
     }
 
     private void updateModePicker(RetroidModePicker picker, int current) {
-        NavigationPanel choices = quickPanel(picker.title, R.string.navigation_mode_hint);
+        boolean customFan = picker == RetroidModePicker.FAN && current == CUSTOM_FAN_MODE;
+        NavigationPanel choices = quickPanel(picker.title, customFan
+                ? R.string.navigation_fan_custom_hint : R.string.navigation_mode_hint);
         for (int start = 0; start < picker.values.length; start += 3) {
             int count = Math.min(3, picker.values.length - start);
             int[] keys = new int[count];
@@ -407,9 +463,18 @@ final class NavigationShortcuts {
             }
             choices.addChoiceRow(keys, labels, actions, selected);
         }
+        if (customFan) {
+            int speed = pendingFanSpeed >= 0 ? pendingFanSpeed : readFanSpeed();
+            fanSpeedSlider = choices.addPercentSlider(R.string.navigation_fan_speed,
+                    R.string.navigation_fan_speed_value, speed, this::queueFanSpeed);
+        }
         presentQuickPanel(choices);
         modePicker = picker;
-        choices.focusCurrentChoice();
+        if (fanSpeedSlider != null) {
+            fanSpeedSlider.requestFocus();
+        } else {
+            choices.focusCurrentChoice();
+        }
     }
 
     private void selectMode(RetroidModePicker picker, int index) {
@@ -424,16 +489,7 @@ final class NavigationShortcuts {
         NavigationPanel source = panel;
         applyingMode = true;
         new Thread(() -> {
-            boolean written = false;
-            try {
-                written = Settings.System.putInt(service.getContentResolver(), picker.setting, value);
-            } catch (SecurityException | IllegalArgumentException ignored) {
-                // Retroid's settings are private to the firmware on some builds.
-            }
-            if (!written) {
-                // Both the key and the value come from the fixed Retroid mode table.
-                new RetroidFirmware().query("settings put system " + picker.setting + " " + value);
-            }
+            writeRetroidSetting(picker.setting, value);
             // Retroid can adjust the requested mode after its settings observers run.
             handler.postDelayed(() -> {
                 applyingMode = false;
@@ -446,6 +502,77 @@ final class NavigationShortcuts {
                 }
             }, 250);
         }, "retroid-mode").start();
+    }
+
+    private int readFanSpeed() {
+        int saved = Settings.System.getInt(service.getContentResolver(), FAN_SPEED_SETTING, 100);
+        return Math.max(0, Math.min(100, saved));
+    }
+
+    private void queueFanSpeed(int speed) {
+        pendingFanSpeed = speed;
+        handler.removeCallbacks(saveFanSpeed);
+        handler.postDelayed(saveFanSpeed, 180);
+    }
+
+    private void saveFanSpeed() {
+        if (writingFanSpeed || pendingFanSpeed < 0) {
+            return;
+        }
+        int speed = pendingFanSpeed;
+        pendingFanSpeed = -1;
+        if (!Settings.System.canWrite(service)) {
+            if (fanSpeedSlider != null) {
+                fanSpeedSlider.setProgress(readFanSpeed());
+            }
+            Toast.makeText(service, R.string.navigation_mode_permission, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        writingFanSpeed = true;
+        new Thread(() -> {
+            writeRetroidSetting(FAN_SPEED_SETTING, speed);
+            handler.post(() -> {
+                writingFanSpeed = false;
+                if (pendingFanSpeed >= 0) {
+                    handler.removeCallbacks(saveFanSpeed);
+                    handler.post(saveFanSpeed);
+                } else if (fanSpeedSlider != null) {
+                    int saved = readFanSpeed();
+                    fanSpeedSlider.setProgress(saved);
+                    if (saved != speed) {
+                        Toast.makeText(service, R.string.navigation_fan_speed_failed, Toast.LENGTH_SHORT).show();
+                    }
+                }
+            });
+        }, "retroid-fan-speed").start();
+    }
+
+    private void writeRetroidSetting(String setting, int value) {
+        try {
+            if (Settings.System.putInt(service.getContentResolver(), setting, value)) {
+                return;
+            }
+        } catch (SecurityException | IllegalArgumentException ignored) {
+            // Retroid's settings are private to the firmware on some builds.
+        }
+        // Setting names are fixed firmware keys and values are integers.
+        new RetroidFirmware().query("settings put system " + setting + " " + value);
+    }
+
+    private void showStickLighting() {
+        if (!"Retroid Pocket 6".equals(Build.MODEL)) {
+            Toast.makeText(service, R.string.navigation_mode_unavailable, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        NavigationPanel lights = quickPanel(R.string.navigation_stick_lighting, R.string.navigation_lighting_hint);
+        modePicker = null;
+        if (lighting == null) lighting = StickLighting.acquire(service, settings, handler);
+        lighting.refreshSettings();
+        LightingColorWheel wheel = lighting.addControls(lights,
+                service.getResources().getConfiguration().screenWidthDp >= 560);
+        lightingOpen = true;
+        presentQuickPanel(lights);
+        wheel.requestFocus();
     }
 
     private void selectQuick(Action action) {
@@ -482,13 +609,14 @@ final class NavigationShortcuts {
 
     private void showPanel(NavigationPanel next, boolean recents) {
         int margin = dp(8);
-        int width = Math.min(screenSize().x - margin * 2, dp(recents ? 420 : 480));
+        int width = Math.min(screenSize().x - margin * 2, dp(recents ? 420 : 520));
         WindowManager.LayoutParams layout = new WindowManager.LayoutParams(width,
                 WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
                 WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
                         | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN, PixelFormat.TRANSLUCENT);
         layout.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
         layout.y = margin;
+        if (UiMotion.enabled(service)) layout.windowAnimations = R.style.PocketPanelMotion;
         if (android.os.Build.VERSION.SDK_INT >= 30) {
             layout.setFitInsetsTypes(WindowInsets.Type.displayCutout());
         }
@@ -516,6 +644,8 @@ final class NavigationShortcuts {
         }
         recentsPanel = false;
         modePicker = null;
+        lightingOpen = false;
+        fanSpeedSlider = null;
     }
 
     private boolean handlePanelKey(KeyEvent event, boolean isHome, boolean isBack) {
@@ -527,7 +657,7 @@ final class NavigationShortcuts {
             if (event.getRepeatCount() == 0) {
                 if (recentsPanel) {
                     exitRecentsToHome();
-                } else if (modePicker != null) {
+                } else if (modePicker != null || lightingOpen) {
                     showQuickActions();
                 } else {
                     closePanel();
@@ -564,6 +694,21 @@ final class NavigationShortcuts {
                 default:
                     return false;
             }
+        }
+        if (lightingOpen) {
+            if (key == KeyEvent.KEYCODE_BUTTON_A) {
+                if (event.getRepeatCount() == 0) {
+                    panel.confirmChoice();
+                }
+                return true;
+            }
+            return false;
+        }
+        if (key == KeyEvent.KEYCODE_BUTTON_SELECT && modePicker == null) {
+            if (event.getRepeatCount() == 0) {
+                showStickLighting();
+            }
+            return true;
         }
         if (modePicker != null) {
             for (int i = 0; i < modePicker.values.length; i++) {

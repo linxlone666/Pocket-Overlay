@@ -19,6 +19,7 @@ final class OverlaySettings {
     static final String REPEAT_DELAY = "repeat_delay_ms";
     static final String REPEAT_INTERVAL = "repeat_interval_ms";
     static final String THEME = "theme";
+    static final String UI_MOTION = "ui_motion";
     static final String PERFORMANCE_ENABLED = "performance_enabled";
     static final String PERFORMANCE_POSITION = "performance_position";
     static final String PERFORMANCE_FAN_FORMAT = "performance_fan_format";

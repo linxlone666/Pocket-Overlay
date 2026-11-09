@@ -109,14 +109,21 @@ final class PerformanceOverlay implements SharedPreferences.OnSharedPreferenceCh
                 || OverlaySettings.PERFORMANCE_ORDER.equals(key)
                 || OverlaySettings.PERFORMANCE_OPACITY.equals(key)
                 || OverlaySettings.PERFORMANCE_SCALE.equals(key)
+                || OverlaySettings.UI_MOTION.equals(key)
                 || OverlaySettings.PERFORMANCE_LAYOUT.equals(key)
                 || OverlaySettings.PERFORMANCE_LOCKED.equals(key)
                 || OverlaySettings.PERFORMANCE_METRICS.equals(key) || OverlaySettings.THEME.equals(key)) {
-            if (panel != null && OverlaySettings.PERFORMANCE_LOCKED.equals(key)) {
+            if (panel != null && (OverlaySettings.PERFORMANCE_LOCKED.equals(key)
+                    || OverlaySettings.UI_MOTION.equals(key))) {
                 setTouchability(placement);
+                placement.windowAnimations = UiMotion.enabled(context) ? R.style.PocketHudMotion : 0;
                 windows.updateViewLayout(panel, placement);
             }
+            TextView previous = panel;
             refresh();
+            if (panel != null && panel == previous && OverlaySettings.PERFORMANCE_LAYOUT.equals(key)) {
+                UiMotion.reveal(panel, 0.55f, 0, 175);
+            }
         }
     }
 
@@ -206,6 +213,7 @@ final class PerformanceOverlay implements SharedPreferences.OnSharedPreferenceCh
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
                 PixelFormat.TRANSLUCENT);
         layout.gravity = Gravity.TOP | Gravity.LEFT;
+        if (UiMotion.enabled(context)) layout.windowAnimations = R.style.PocketHudMotion;
         if (Build.VERSION.SDK_INT >= 30) {
             layout.setFitInsetsTypes(0);
         }
@@ -348,6 +356,7 @@ final class PerformanceOverlay implements SharedPreferences.OnSharedPreferenceCh
 
     private void hide() {
         if (panel != null) {
+            panel.animate().cancel();
             windows.removeViewImmediate(panel);
             panel = null;
             pinched = false;

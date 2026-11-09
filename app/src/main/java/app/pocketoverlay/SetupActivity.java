@@ -7,6 +7,8 @@ import android.content.ActivityNotFoundException;
 import android.content.ComponentName;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
 import android.content.SharedPreferences;
 import android.content.res.ColorStateList;
 import android.graphics.Typeface;
@@ -15,6 +17,8 @@ import android.graphics.drawable.StateListDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.Settings;
 import android.text.InputType;
 import android.text.SpannableString;
@@ -22,6 +26,7 @@ import android.text.Spanned;
 import android.text.style.ForegroundColorSpan;
 import android.view.Gravity;
 import android.view.KeyEvent;
+import android.view.Window;
 import android.view.View;
 import android.view.accessibility.AccessibilityManager;
 import android.widget.Button;
@@ -37,11 +42,14 @@ import android.widget.Space;
 import android.widget.Switch;
 import android.widget.TextView;
 
+import java.io.File;
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.function.IntConsumer;
 
 import app.pocketoverlay.OverlaySettings.Binding;
@@ -49,7 +57,7 @@ import app.pocketoverlay.OverlaySettings.Binding;
 public final class SetupActivity extends Activity {
     static boolean visible;
     private static final String SELECTED_PAGE = "selected_page";
-    private enum Page { OVERLAY, PERFORMANCE, SETTINGS, NAVIGATION }
+    private enum Page { OVERLAY, PERFORMANCE, SETTINGS, NAVIGATION, LIGHTING, ABOUT }
     private int background, sidebarColor, surface, accent, textColor, muted, selection;
     private SharedPreferences settings;
     private LinearLayout content;
@@ -57,8 +65,21 @@ public final class SetupActivity extends Activity {
     private TextView overlayTab;
     private TextView performanceTab;
     private TextView navigationTab;
+    private TextView lightingTab;
+    private StickLighting lighting;
+    private NavigationPanel lightingPanel;
     private Button homeProtection;
     private TextView settingsTab;
+    private TextView aboutTab;
+    private PermissionCard installPermission;
+    private final ExecutorService updateWorker = Executors.newSingleThreadExecutor();
+    private TextView updateStatus;
+    private Button checkUpdates;
+    private Button downloadUpdate;
+    private AppUpdate.Release availableUpdate;
+    private File downloadedUpdate;
+    private CharSequence updateMessage;
+    private boolean updateBusy;
     private Page page;
     private boolean darkTheme;
     private AlertDialog recordingDialog;
@@ -154,6 +175,8 @@ public final class SetupActivity extends Activity {
     }
 
     private void showPage(Page selected) {
+        boolean changedTab = page != null && page != selected;
+        closeLightingPage();
         if (performanceStatus != null) {
             performanceStatus.close();
             performanceStatus = null;
@@ -167,19 +190,28 @@ public final class SetupActivity extends Activity {
         performanceLayouts = null;
         shortcutPermission = null;
         brightnessPermission = null;
+        installPermission = null;
+        updateStatus = null;
+        checkUpdates = null;
+        downloadUpdate = null;
         permissionsPrompt = null;
         overlayTab.setSelected(page == Page.OVERLAY);
         performanceTab.setSelected(page == Page.PERFORMANCE);
         navigationTab.setSelected(page == Page.NAVIGATION);
+        lightingTab.setSelected(page == Page.LIGHTING);
         settingsTab.setSelected(page == Page.SETTINGS);
+        aboutTab.setSelected(page == Page.ABOUT);
         switch (page) {
             case OVERLAY: createOverlayPage(); break;
             case PERFORMANCE: createPerformancePage(); break;
             case SETTINGS: createSettingsPage(); break;
             case NAVIGATION: createNavigationPage(); break;
+            case LIGHTING: createLightingPage(); break;
+            case ABOUT: createAboutPage(); break;
         }
         updatePermissions();
         scroll.scrollTo(0, 0);
+        if (changedTab) UiMotion.reveal(content, 0.35f, 10, 210);
     }
 
     private void createOverlayPage() {
@@ -230,10 +262,10 @@ public final class SetupActivity extends Activity {
         addText(R.string.shortcuts_section, 16, accent, true, 20);
         addText(R.string.binding_hint, 14, muted, false, 4);
         TileGrid bindings = new TileGrid();
-        bindTile(addTile(bindings), Binding.VOLUME_UP);
         bindTile(addTile(bindings), Binding.VOLUME_DOWN);
-        bindTile(addTile(bindings), Binding.BRIGHTNESS_UP);
+        bindTile(addTile(bindings), Binding.VOLUME_UP);
         bindTile(addTile(bindings), Binding.BRIGHTNESS_DOWN);
+        bindTile(addTile(bindings), Binding.BRIGHTNESS_UP);
         refreshBindings();
         Switch repeat = addToggle(R.string.hold_to_repeat, OverlaySettings.REPEAT);
         TileGrid timing = new TileGrid();
@@ -468,7 +500,7 @@ public final class SetupActivity extends Activity {
     }
 
     private void showPerformanceChoice(int title, int options, int selected, IntConsumer onChoice) {
-        showPerformanceDialog(new AlertDialog.Builder(this)
+        showPocketDialog(new AlertDialog.Builder(this)
                 .setTitle(title)
                 .setSingleChoiceItems(options, selected, (dialog, choice) -> {
                     onChoice.accept(choice);
@@ -477,10 +509,15 @@ public final class SetupActivity extends Activity {
                 .setNegativeButton(android.R.string.cancel, null));
     }
 
-    private AlertDialog showPerformanceDialog(AlertDialog.Builder builder) {
-        AlertDialog dialog = builder.create();
-        dialog.getWindow().setBackgroundDrawable(rounded(surface, 18));
-        dialog.getWindow().getDecorView().setClipToOutline(true);
+    private AlertDialog showPocketDialog(AlertDialog.Builder builder) {
+        return showPocketDialog(builder.create());
+    }
+
+    private AlertDialog showPocketDialog(AlertDialog dialog) {
+        Window window = dialog.getWindow();
+        window.setBackgroundDrawable(rounded(surface, 18));
+        window.getDecorView().setClipToOutline(true);
+        window.setWindowAnimations(UiMotion.enabled(this) ? R.style.PocketDialogMotion : 0);
         dialog.show();
         return dialog;
     }
@@ -595,7 +632,7 @@ public final class SetupActivity extends Activity {
             }
         });
         update.run();
-        AlertDialog dialog = showPerformanceDialog(new AlertDialog.Builder(this)
+        AlertDialog dialog = showPocketDialog(new AlertDialog.Builder(this)
                 .setTitle(opacity ? R.string.performance_opacity : R.string.performance_scale)
                 .setView(insetDialogContent(options))
                 .setNeutralButton(R.string.performance_default, null)
@@ -632,7 +669,7 @@ public final class SetupActivity extends Activity {
         options.addView(rows);
         scroller.addView(options);
         renderOrder(rows, groups);
-        showPerformanceDialog(new AlertDialog.Builder(this)
+        showPocketDialog(new AlertDialog.Builder(this)
                 .setTitle(R.string.performance_order)
                 .setView(insetDialogContent(scroller))
                 .setNegativeButton(android.R.string.cancel, null)
@@ -689,6 +726,42 @@ public final class SetupActivity extends Activity {
 
     private void selectPerformancePreset(EnumMap<PerformancePreset, View> cards, int metrics) {
         cards.forEach((preset, card) -> card.setSelected(preset.metrics == metrics));
+    }
+
+    private void createLightingPage() {
+        if (!"Retroid Pocket 6".equals(Build.MODEL)) {
+            content.addView(label(R.string.navigation_mode_unavailable, 14, textColor, false));
+            return;
+        }
+        permissionsPrompt = addControl();
+        permissionsPrompt.setText(R.string.permissions_prompt);
+        permissionsPrompt.setOnClickListener(view -> showPage(Page.SETTINGS));
+        lighting = StickLighting.acquire(this, settings, new Handler(Looper.getMainLooper()));
+        lighting.refreshSettings();
+        lightingPanel = new NavigationPanel(this, settings, R.string.navigation_stick_lighting,
+                R.string.lighting_page_hint);
+        lighting.addControls(lightingPanel, getResources().getConfiguration().screenWidthDp >= 620);
+        content.addView(lightingPanel, new LinearLayout.LayoutParams(-1, -2));
+    }
+
+    private void closeLightingPage() {
+        if (lighting != null) {
+            lighting.release();
+            lighting = null;
+            lightingPanel = null;
+        }
+    }
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        if (lightingPanel != null && lightingPanel.findFocus() != null
+                && event.getKeyCode() == KeyEvent.KEYCODE_BUTTON_A) {
+            if (event.getAction() == KeyEvent.ACTION_UP && !event.isCanceled()) {
+                lightingPanel.confirmChoice();
+            }
+            return true;
+        }
+        return super.dispatchKeyEvent(event);
     }
 
     private void createNavigationPage() {
@@ -795,6 +868,162 @@ public final class SetupActivity extends Activity {
                 new int[]{OverlaySettings.DARK, OverlaySettings.LIGHT, OverlaySettings.MATERIAL_YOU},
                 getResources().getStringArray(R.array.app_themes), this::recreate);
         addText(R.string.theme_hint, 14, muted, false, 8);
+        addToggle(R.string.interface_animations, OverlaySettings.UI_MOTION, true);
+        addText(R.string.updates_section, 16, accent, true, 20);
+        installPermission = addPermission(R.string.update_install_permission, R.string.update_install_detail,
+                R.string.update_install_allow, installerSettings());
+        addPageButton(R.string.update_check, () -> {
+            showPage(Page.ABOUT);
+            checkForUpdate();
+        });
+    }
+
+    private void createAboutPage() {
+        addText(R.string.about_page, 28, textColor, true, 0);
+        addText(R.string.app_name, 20, textColor, true, 12);
+        addText(R.string.about_description, 14, muted, false, 4);
+        addText(R.string.about_compatibility, 14, muted, false, 8);
+        addText(R.string.about_license, 14, muted, false, 8);
+
+        addText(R.string.updates_section, 16, accent, true, 20);
+        addText(getString(R.string.about_version, installedPackage().versionName), 14, textColor, true, 6);
+        updateStatus = label(R.string.update_idle, 14, muted, false);
+        addRow(updateStatus, 4);
+        checkUpdates = addPageButton(R.string.update_check, this::checkForUpdate);
+        downloadUpdate = addPageButton(R.string.update_download, this::downloadUpdate);
+        refreshUpdateControls();
+
+        addText(R.string.about_project, 16, accent, true, 20);
+        addPageButton(R.string.about_source, () -> openProjectLink(AppUpdate.PROJECT));
+        addPageButton(R.string.about_releases, () -> openProjectLink(AppUpdate.PROJECT + "/releases"));
+        addPageButton(R.string.about_issues, () -> openProjectLink(AppUpdate.PROJECT + "/issues"));
+    }
+
+    private Button addPageButton(int title, Runnable action) {
+        Button button = addControl();
+        button.setText(title);
+        button.setOnClickListener(view -> action.run());
+        return button;
+    }
+
+    private void openProjectLink(String url) {
+        try {
+            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
+        } catch (ActivityNotFoundException ignored) {
+            updateMessage = getText(R.string.about_no_browser);
+            refreshUpdateControls();
+        }
+    }
+
+    @SuppressWarnings("deprecation")
+    private PackageInfo installedPackage() {
+        try {
+            return getPackageManager().getPackageInfo(getPackageName(), PackageManager.GET_SIGNING_CERTIFICATES);
+        } catch (PackageManager.NameNotFoundException exception) {
+            throw new IllegalStateException(exception);
+        }
+    }
+
+    private Intent installerSettings() {
+        return new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                Uri.fromParts("package", getPackageName(), null));
+    }
+
+    private void refreshUpdateControls() {
+        if (updateStatus == null) return;
+        updateStatus.setText(updateMessage == null ? getText(R.string.update_idle) : updateMessage);
+        checkUpdates.setEnabled(!updateBusy);
+        downloadUpdate.setVisibility(availableUpdate == null ? View.GONE : View.VISIBLE);
+        downloadUpdate.setEnabled(!updateBusy);
+        downloadUpdate.setText(downloadedUpdate == null ? R.string.update_download : R.string.update_install);
+    }
+
+    private void checkForUpdate() {
+        if (updateBusy) return;
+        availableUpdate = null;
+        downloadedUpdate = null;
+        updateBusy = true;
+        updateMessage = getText(R.string.update_checking);
+        refreshUpdateControls();
+        String currentVersion = installedPackage().versionName;
+        updateWorker.execute(() -> {
+            try {
+                AppUpdate.Release latest = AppUpdate.check(currentVersion);
+                finishUpdate(() -> {
+                    availableUpdate = latest;
+                    updateMessage = latest == null ? getText(R.string.update_current)
+                            : getString(R.string.update_available, latest.version);
+                });
+            } catch (Exception exception) {
+                android.util.Log.w("PocketOverlay", "Update check failed", exception);
+                finishUpdate(() -> updateMessage = getText(R.string.update_check_failed));
+            }
+        });
+    }
+
+    private void downloadUpdate() {
+        if (updateBusy || availableUpdate == null) return;
+        if (!getPackageManager().canRequestPackageInstalls()) {
+            showPocketDialog(new AlertDialog.Builder(this)
+                    .setTitle(R.string.update_install_permission)
+                    .setMessage(R.string.update_install_prompt)
+                    .setPositiveButton(R.string.update_install_allow, (dialog, which) -> {
+                        try {
+                            startActivity(installerSettings());
+                        } catch (ActivityNotFoundException ignored) {
+                            updateMessage = getText(R.string.update_install_failed);
+                            refreshUpdateControls();
+                        }
+                    })
+                    .setNegativeButton(android.R.string.cancel, null));
+            return;
+        }
+        if (downloadedUpdate != null && downloadedUpdate.isFile()) {
+            launchInstaller();
+            return;
+        }
+        downloadedUpdate = null;
+        updateBusy = true;
+        updateMessage = getText(R.string.update_downloading);
+        refreshUpdateControls();
+        AppUpdate.Release release = availableUpdate;
+        File cache = getCacheDir();
+        PackageManager packages = getPackageManager();
+        PackageInfo installed = installedPackage();
+        updateWorker.execute(() -> {
+            try {
+                File apk = AppUpdate.download(cache, packages, installed, release);
+                finishUpdate(() -> {
+                    downloadedUpdate = apk;
+                    updateMessage = getString(R.string.update_ready, release.version);
+                    if (visible && page == Page.ABOUT) launchInstaller();
+                });
+            } catch (Exception exception) {
+                android.util.Log.w("PocketOverlay", "Update download failed", exception);
+                finishUpdate(() -> updateMessage = getText(R.string.update_download_failed));
+            }
+        });
+    }
+
+    private void finishUpdate(Runnable result) {
+        runOnUiThread(() -> {
+            if (isDestroyed() || isFinishing()) return;
+            updateBusy = false;
+            result.run();
+            refreshUpdateControls();
+        });
+    }
+
+    private void launchInstaller() {
+        Uri apk = UpdateApkProvider.uri(this);
+        try {
+            startActivity(new Intent(Intent.ACTION_VIEW)
+                    .setDataAndType(apk, UpdateApkProvider.MIME_TYPE)
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION));
+        } catch (ActivityNotFoundException | SecurityException ignored) {
+            updateMessage = getText(R.string.update_install_failed);
+            refreshUpdateControls();
+        }
     }
 
     private PermissionCard addPermission(int title, int detail, int actionText, Intent intent) {
@@ -839,8 +1068,13 @@ public final class SetupActivity extends Activity {
         overlayTab = addTab(sidebar, R.string.overlay_page, Page.OVERLAY);
         performanceTab = addTab(sidebar, R.string.performance_page, Page.PERFORMANCE);
         navigationTab = addTab(sidebar, R.string.navigation_page, Page.NAVIGATION);
+        lightingTab = addTab(sidebar, R.string.lighting_page, Page.LIGHTING);
         sidebar.addView(new Space(this), new LinearLayout.LayoutParams(1, 0, 1));
         settingsTab = addTab(sidebar, R.string.settings_page, Page.SETTINGS);
+        aboutTab = addTab(sidebar, R.string.about_page, Page.ABOUT);
+        TextView version = label(getString(R.string.sidebar_version, installedPackage().versionName), 12, muted, false);
+        version.setPadding(dp(10), dp(3), dp(10), 0);
+        sidebar.addView(version);
         return sidebar;
     }
 
@@ -867,14 +1101,14 @@ public final class SetupActivity extends Activity {
                 getText(R.string.overlay_battery_fill), getText(R.string.overlay_charging_indicator)};
         boolean[] checked = {settings.getBoolean(keys[0], false), settings.getBoolean(keys[1], true),
                 settings.getBoolean(keys[2], true)};
-        new AlertDialog.Builder(this)
+        showPocketDialog(new AlertDialog.Builder(this)
                 .setTitle(R.string.overlay_battery_icon)
                 .setMultiChoiceItems(labels, checked, (dialog, index, enabled) -> {
                     settings.edit().putBoolean(keys[index], enabled).apply();
                     refreshPreview.run();
                 })
                 .setPositiveButton(android.R.string.ok, null)
-                .show();
+                .create());
     }
 
     private Runnable addPreview(LinearLayout previews, boolean brightness, int steps, float level) {
@@ -937,7 +1171,7 @@ public final class SetupActivity extends Activity {
             String[] labels, Runnable onChange) {
         int selected = choiceIndex(settings.getInt(key, defaultValue), values);
         setChoiceLabel(button, title, labels[selected]);
-        button.setOnClickListener(view -> new AlertDialog.Builder(this)
+        button.setOnClickListener(view -> showPocketDialog(new AlertDialog.Builder(this)
                 .setTitle(title)
                 .setSingleChoiceItems(labels, choiceIndex(settings.getInt(key, defaultValue), values),
                         (dialog, index) -> {
@@ -949,7 +1183,7 @@ public final class SetupActivity extends Activity {
                             }
                         })
                 .setNegativeButton(android.R.string.cancel, null)
-                .show());
+                .create()));
     }
 
     private final class TileGrid {
@@ -1029,13 +1263,13 @@ public final class SetupActivity extends Activity {
             FrameLayout input = new FrameLayout(this);
             input.setPadding(dp(24), dp(8), dp(24), 0);
             input.addView(field, new FrameLayout.LayoutParams(-1, -2));
-            AlertDialog dialog = new AlertDialog.Builder(this)
+            AlertDialog dialog = showPocketDialog(new AlertDialog.Builder(this)
                     .setTitle(title)
                     .setMessage(getString(R.string.duration_range, min, max))
                     .setView(input)
                     .setNegativeButton(android.R.string.cancel, null)
                     .setPositiveButton(R.string.save, null)
-                    .show();
+                    .create());
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(save -> {
                 try {
                     int time = Integer.parseInt(field.getText().toString());
@@ -1112,7 +1346,7 @@ public final class SetupActivity extends Activity {
         });
         recordingDialog = dialog;
         OverlaySettings.recordingButton = true;
-        dialog.show();
+        showPocketDialog(dialog);
         dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(view -> {
             int first = binding.defaultKey == KeyEvent.KEYCODE_UNKNOWN
                     ? KeyEvent.KEYCODE_UNKNOWN : OverlaySettings.DEFAULT_MODIFIER;
@@ -1164,6 +1398,10 @@ public final class SetupActivity extends Activity {
     }
 
     private TextView label(int text, int size, int color, boolean bold) {
+        return label(getText(text), size, color, bold);
+    }
+
+    private TextView label(CharSequence text, int size, int color, boolean bold) {
         TextView label = new TextView(this);
         label.setText(text);
         label.setTextSize(size);
@@ -1175,6 +1413,10 @@ public final class SetupActivity extends Activity {
     }
 
     private void addText(int text, int size, int color, boolean bold, int top) {
+        addText(getText(text), size, color, bold, top);
+    }
+
+    private void addText(CharSequence text, int size, int color, boolean bold, int top) {
         addRow(label(text, size, color, bold), top);
     }
 
@@ -1222,6 +1464,7 @@ public final class SetupActivity extends Activity {
     protected void onResume() {
         super.onResume();
         visible = true;
+        if (lighting != null) lighting.refreshSettings();
         if (performanceStatus != null) {
             performanceStatus.setVisible(true);
         }
@@ -1240,6 +1483,8 @@ public final class SetupActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        updateWorker.shutdownNow();
+        closeLightingPage();
         settings.unregisterOnSharedPreferenceChangeListener(performanceState);
         if (performanceStatus != null) {
             performanceStatus.close();
@@ -1265,8 +1510,10 @@ public final class SetupActivity extends Activity {
         if (page == Page.SETTINGS) {
             showPermissionStatus(shortcutPermission, enabled);
             showPermissionStatus(brightnessPermission, brightnessAllowed);
-        } else {
-            boolean needsPermission = !enabled || (page == Page.OVERLAY && !brightnessAllowed);
+            showPermissionStatus(installPermission, getPackageManager().canRequestPackageInstalls());
+        } else if (permissionsPrompt != null) {
+            boolean needsPermission = page == Page.LIGHTING ? !brightnessAllowed
+                    : !enabled || (page == Page.OVERLAY && !brightnessAllowed);
             permissionsPrompt.setVisibility(needsPermission ? View.VISIBLE : View.GONE);
         }
     }

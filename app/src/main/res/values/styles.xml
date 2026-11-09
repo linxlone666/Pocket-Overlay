@@ -14,4 +14,16 @@
         <item name="android:windowLightStatusBar">true</item>
         <item name="android:windowLightNavigationBar">true</item>
     </style>
+    <style name="PocketDialogMotion">
+        <item name="android:windowEnterAnimation">@anim/dialog_enter</item>
+        <item name="android:windowExitAnimation">@anim/dialog_exit</item>
+    </style>
+    <style name="PocketPanelMotion">
+        <item name="android:windowEnterAnimation">@anim/panel_enter</item>
+        <item name="android:windowExitAnimation">@anim/panel_exit</item>
+    </style>
+    <style name="PocketHudMotion">
+        <item name="android:windowEnterAnimation">@anim/hud_enter</item>
+        <item name="android:windowExitAnimation">@anim/hud_exit</item>
+    </style>
 </resources>

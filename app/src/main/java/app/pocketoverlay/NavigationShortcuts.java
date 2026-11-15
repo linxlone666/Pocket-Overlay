@@ -6,6 +6,9 @@ import android.app.KeyguardManager;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.ActivityInfo;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.graphics.Path;
 import android.graphics.PixelFormat;
 import android.graphics.Point;
@@ -79,6 +82,7 @@ final class NavigationShortcuts {
     private NavigationPanel panel;
     private String droidDeckPackage;
     private boolean recentsPanel;
+    private boolean recentsPanelPending;
     private RetroidModePicker modePicker;
     private StickLighting lighting;
     private boolean lightingOpen;
@@ -116,6 +120,9 @@ final class NavigationShortcuts {
         }
         String owner = packageName.toString();
         String windowClass = className.toString();
+        if ((recentsPanel || recentsPanelPending) && isHomeActivity(owner, windowClass)) {
+            closePanel();
+        }
         // DroidDeck's compatibility builds keep the Activity namespace but use another app ID.
         if ("com.droiddeck.launcher".equals(owner) || "com.steamdeck.launcher".equals(owner)
                 || windowClass.startsWith("com.droiddeck.launcher.")) {
@@ -127,6 +134,18 @@ final class NavigationShortcuts {
                         || SetupActivity.class.getName().equals(windowClass))) {
             droidDeckPackage = null;
         }
+    }
+
+    private boolean isHomeActivity(String owner, String windowClass) {
+        Intent homeIntent = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME).setPackage(owner);
+        for (ResolveInfo result : service.getPackageManager()
+                .queryIntentActivities(homeIntent, PackageManager.MATCH_DEFAULT_ONLY)) {
+            ActivityInfo activity = result.activityInfo;
+            if (windowClass.equals(activity.name) || windowClass.equals(activity.targetActivity)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     boolean passesBackToDroidDeck(KeyEvent event) {
@@ -587,11 +606,13 @@ final class NavigationShortcuts {
     private void showRecents() {
         closePanel();
         if (service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_RECENTS)) {
+            recentsPanelPending = true;
             handler.postDelayed(openRecentsPanel, 280);
         }
     }
 
     private void openRecentsPanel() {
+        recentsPanelPending = false;
         if (!ready() || panel != null) {
             return;
         }
@@ -614,6 +635,10 @@ final class NavigationShortcuts {
                 WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
                 WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
                         | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN, PixelFormat.TRANSLUCENT);
+        if (recents) {
+            // Keep Android Recents focused so the launcher gets focus when it closes.
+            layout.flags |= WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
+        }
         layout.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
         layout.y = margin;
         if (UiMotion.enabled(service)) layout.windowAnimations = R.style.PocketPanelMotion;
@@ -634,6 +659,7 @@ final class NavigationShortcuts {
 
     private void closePanel() {
         handler.removeCallbacks(openRecentsPanel);
+        recentsPanelPending = false;
         handler.removeCallbacks(processRecentInputs);
         recentInputs.clear();
         recentGestureEndedAt = 0;

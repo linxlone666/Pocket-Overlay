@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Pocket Overlay</string>
+    <string name="app_name">Pocket Plus</string>
     <string name="service_description">Listens for controller shortcuts and sends taps or swipes in Recent apps. The service does not read screen content.</string>
     <string name="overlay_page">Volume &amp; Brightness</string>
     <string name="navigation_page">Home &amp; Back</string>
@@ -50,12 +50,13 @@
     <string name="navigation_performance_high">High Performance</string>
     <string name="navigation_mode_hint">Press the button shown or tap a mode. B goes back.</string>
     <string name="navigation_mode_unavailable">These controls require Retroid Pocket 6 firmware.</string>
-    <string name="navigation_mode_permission">Enable Allow brightness changes in Pocket Overlay Settings to change system modes.</string>
+    <string name="navigation_mode_permission">Enable Allow brightness changes in Pocket Plus Settings to change system modes.</string>
     <string name="navigation_mode_write_failed">The Retroid firmware couldn’t apply this mode.</string>
     <string name="navigation_key_start">ST</string>
     <string name="navigation_key_select">SEL</string>
     <string name="navigation_stick_lighting">Stick lighting</string>
     <string name="lighting_page">Lighting</string>
+    <string name="lighting_effects">Lighting effects</string>
     <string name="lighting_page_hint">Choose a color and effect. Changes apply live.</string>
     <string name="navigation_lighting_link">Link stick colors</string>
     <string name="navigation_lighting_wheel">Color wheel</string>
@@ -200,6 +201,9 @@
     <string name="brightness_down">Brightness down</string>
     <string name="button_select">Select</string>
     <string name="button_start">Start</string>
+    <string name="block_meter_starter">Block shortcut starter input</string>
+    <string name="block_meter_starter_hint">Reserve the first button in volume and brightness combos. Turn this off to use that button by itself in games.</string>
+    <string name="digital_triggers_hint">If L2 or R2 still affects a game during a shortcut, set L2/R2 mode to Digital in Retroid Quick Settings.</string>
     <string name="binding_hint">Tap a tile to bind one button or a two-button combo.</string>
     <string name="record_button">Tap one button to bind it. For a combo, hold the first button, press the second, then release both.</string>
     <string name="restore_button">Use default</string>
@@ -216,7 +220,7 @@
     <string name="permission_allowed">Allowed</string>
     <string name="permission_needed">Action needed</string>
     <string name="permissions_prompt">Review permissions in Settings</string>
-    <string name="brightness_permission_needed">Allow brightness changes in Pocket Overlay.</string>
+    <string name="brightness_permission_needed">Allow brightness changes in Pocket Plus.</string>
     <string-array name="overlay_sizes">
         <item>75%</item>
         <item>90%</item>
@@ -249,7 +253,7 @@
     <string name="interface_animations">Interface animations</string>
     <string name="about_page">About</string>
     <string name="about_project">Project links</string>
-    <string name="about_description">Pocket Overlay adds controller shortcuts, volume and brightness meters, a performance HUD, and quick controls to Android handhelds.</string>
+    <string name="about_description">Pocket Plus adds controller shortcuts, volume and brightness meters, a performance HUD, and quick controls to Android handhelds.</string>
     <string name="about_compatibility">Requires Android 9 or later. Retroid Pocket 6 firmware provides additional lighting, navigation, and hardware controls.</string>
     <string name="about_license">Open source under the MIT License. Maintained by linxlone666.</string>
     <string name="about_version">Installed version %1$s</string>
@@ -272,7 +276,19 @@
     <string name="update_download_failed">Couldn’t download or verify the update. Try again or open Release notes.</string>
     <string name="update_install_failed">Couldn’t open the Android installer. Check the install permission in Settings.</string>
     <string name="update_install_permission">Install app updates</string>
-    <string name="update_install_detail">Optional. Lets Pocket Overlay hand downloaded updates to the Android installer.</string>
+    <string name="update_install_detail">Optional. Lets Pocket Plus hand downloaded updates to the Android installer.</string>
     <string name="update_install_allow">Open install settings</string>
-    <string name="update_install_prompt">Allow installs from Pocket Overlay in Android settings. Then return here and tap Download and install update again.</string>
+    <string name="update_install_prompt">Allow installs from Pocket Plus in Android settings. Then return here and tap Download and install update again.</string>
+    <string name="remap_page">Button Remap</string>
+    <string name="remap_rear_view">Rear view</string>
+    <string name="remap_rear_description">Back of the Retroid Pocket 6 showing the M1 and M2 buttons</string>
+    <string name="remap_hint">Tap a box to record a Pocket Plus shortcut. The line points to its assigned button.</string>
+    <string name="remap_color">Console color</string>
+    <string-array name="rp6_colors">
+        <item>Silver</item>
+        <item>Black</item>
+        <item>16Bit</item>
+        <item>Orange</item>
+        <item>Light Purple</item>
+    </string-array>
 </resources>

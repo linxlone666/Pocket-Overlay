@@ -194,6 +194,10 @@ final class StickLighting {
     }
 
     LightingColorWheel addControls(NavigationPanel panel, boolean wide) {
+        return addControls(panel, wide, null);
+    }
+
+    LightingColorWheel addControls(NavigationPanel panel, boolean wide, NavigationPanel effectsPanel) {
         panel.setHeaderControl(createPowerSwitch(panel.getContext()));
         Context ui = panel.getContext();
         LinearLayout layout = new LinearLayout(ui);
@@ -223,7 +227,9 @@ final class StickLighting {
         palette.addView(preview, previewLayout);
         View[] swatches = addSwatches(palette, panel.foregroundColor(), rightSide);
         NavigationPanel speedControls = panel.controlColumn();
-        palette.addView(speedControls, new LinearLayout.LayoutParams(-1, -2));
+        if (effectsPanel == null) {
+            palette.addView(speedControls, new LinearLayout.LayoutParams(-1, -2));
+        }
         SeekBar speed = speedControls.addSlider(R.string.navigation_lighting_speed,
                 R.string.navigation_lighting_speed_value, MIN_EFFECT_SPEED, MAX_EFFECT_SPEED, 10, effectSpeed,
                 percent -> {
@@ -324,7 +330,11 @@ final class StickLighting {
         brightnessSlider.getLayoutParams().height = dp(ui, 34);
         saturation.getLayoutParams().height = dp(ui, 34);
         shade.getLayoutParams().height = dp(ui, 34);
-        View[] effectTiles = addChoices(panel, EFFECT_LABELS, effects);
+        NavigationPanel effectChoices = effectsPanel == null ? panel : effectsPanel;
+        View[] effectTiles = addChoices(effectChoices, EFFECT_LABELS, effects);
+        if (effectsPanel != null) {
+            effectsPanel.addView(speedControls, new LinearLayout.LayoutParams(-1, -2));
+        }
         Runnable refresh = () -> {
             updating[0] = true;
             lights[0].setChecked(left);

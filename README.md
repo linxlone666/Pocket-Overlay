@@ -1,6 +1,6 @@
-# Pocket Overlay
+# Pocket Plus
 
-Pocket Overlay is a standalone Android app for a controller with digital buttons. By default, hold Select and tap R1/L1 for media volume or R2/L2 for brightness. Keep both buttons held for one second to repeat the adjustment. Release either button to stop. The overlay shows a segmented meter for the level you changed, alongside the time and battery status. It closes automatically.
+Pocket Plus is a standalone Android app for a controller with digital buttons. By default, hold Select and tap R1/L1 for media volume or R2/L2 for brightness. Keep both buttons held for one second to repeat the adjustment. Release either button to stop. The overlay shows a segmented meter for the level you changed, alongside the time and battery status. It closes automatically.
 
 The app requires Android 9 or later and was tested on a Retroid Pocket 6 running Android 13. It uses Android Accessibility to detect shortcuts and the Modify system settings permission to adjust brightness. The in-app updater connects to GitHub when you check for or download an update.
 
@@ -8,18 +8,18 @@ Open **Volume & Brightness** to change the size, slide durations, time on screen
 
 ## Set up on the Pocket 6
 
-1. Download the APK from [GitHub Releases](https://github.com/linxlone666/Pocket-Overlay/releases), install it, and open Pocket Overlay.
-2. Open the app's **Settings** tab, tap **Enable controller shortcuts**, and turn on **Pocket Overlay** in Android Accessibility settings. If Android blocks the toggle for a sideloaded app, open **Settings → Apps → Pocket Overlay**, then choose **Allow restricted settings** in the overflow menu.
-3. Return to Pocket Overlay and tap **Allow brightness changes** to grant the system settings permission.
+1. Download the APK from [GitHub Releases](https://github.com/linxlone666/Pocket-Overlay/releases), install it, and open Pocket Plus.
+2. Open the app's **Settings** tab, tap **Enable controller shortcuts**, and turn on **Pocket Plus** in Android Accessibility settings. If Android blocks the toggle for a sideloaded app, open **Settings → Apps → Pocket Plus**, then choose **Allow restricted settings** in the overflow menu.
+3. Return to Pocket Plus and tap **Allow brightness changes** to grant the system settings permission.
 4. Test the four shortcuts over an emulator. If L2/R2 only send analog input, set the handheld's L2/R2 mode to **Both** or **Digital**. Disable overlapping shortcuts in other key mappers or RetroHrai while testing.
 
-Volume adjusts Android's shared media stream. A combo starter passes through to the game unless it also has its own single-button shortcut. The action button is intercepted when its shortcut runs. If adaptive brightness changes the level back, disable it in Display settings to use manual brightness.
+Volume adjusts Android's shared media stream. Volume and brightness combos reserve their first button by default. Turn off **Block shortcut starter input** to let that button reach games on its own. Pocket Plus consumes the shortcut’s digital action button through release. If L2/R2 still affects a game during a shortcut, use **Digital** trigger mode on Retroid to stop separate analog trigger input. If adaptive brightness changes the level back, disable it in Display settings to use manual brightness.
 
-To open ClusterTune's profile picker with the physical Back button, enable **Left-edge profile picker** in ClusterTune under **Settings → Quick access**. In Pocket Overlay, enable **Home and Back gestures** and choose **ClusterTune profile picker** under **Home & Back → Back → Hold**. The shortcut needs the edge handle to be visible in the current app. Press **B** or physical **Back** to close the picker.
+To open ClusterTune's profile picker with the physical Back button, enable **Left-edge profile picker** in ClusterTune under **Settings → Quick access**. In Pocket Plus, enable **Home and Back gestures** and choose **ClusterTune profile picker** by tapping **Back** on the **Button Remap** diagram and opening **Hold**. The shortcut needs the edge handle to be visible in the current app. Press **B** or physical **Back** to close the picker.
 
 ## Home and Back gestures
 
-Open **Home & Back** to enable or customize tap, double tap, and hold on the Pocket 6's physical navigation buttons. Home defaults to Home on tap, Recent apps on double tap, and a Quick actions menu on hold. In Quick actions, press Start for Fan mode, L2 for Perf mode, or A to pin or unpin the HUD. Press the button shown next to a mode to apply it. In Recent apps, use D-pad Left or Right to browse, A to open, Y to close the centered app, or B to return to Home. Turn off Retroid accidental Home protection on the same page if the firmware requires two presses.
+In **Button Remap**, enable **Home and Back gestures**, then tap **Home** or **Back** on the controller diagram to customize tap, double tap, and hold. Home defaults to Home on tap, Recent apps on double tap, and a Quick actions menu on hold. In Quick actions, press Start for Fan mode, L2 for Perf mode, or A to pin or unpin the HUD. Press the button shown next to a mode to apply it. In Recent apps, use D-pad Left or Right to browse, A to open, Y to close the centered app, or B to return to Home. Turn off Retroid accidental Home protection on the same page if the firmware requires two presses.
 
 ## Performance overlay
 
@@ -31,9 +31,9 @@ CPU and GPU load and chip temperatures work directly on the Pocket 6. Other devi
 
 On the Retroid Pocket 6, open **Lighting** in the app or **Stick lighting** in Quick actions. Use the color wheel or a preset, link both sticks or choose their colors separately, and adjust brightness and power. Breathing, Rainbow, and Pulse have an effect speed slider. Changes preview live.
 
-## Update Pocket Overlay
+## Update Pocket Plus
 
-Open **About → Check for updates** to find the latest stable GitHub release. Pocket Overlay verifies the update APK and opens Android’s installer for confirmation. The first time, Android may ask you to allow installs from Pocket Overlay. You can also manage this permission under **Settings → App updates**.
+Open **About → Check for updates** to find the latest stable GitHub release. Pocket Plus verifies the update APK and opens Android’s installer for confirmation. The first time, Android may ask you to allow installs from Pocket Plus. You can also manage this permission under **Settings → App updates**.
 
 ## Build from source
 

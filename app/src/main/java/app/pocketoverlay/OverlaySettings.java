@@ -6,6 +6,7 @@ import android.content.res.Configuration;
 import android.view.KeyEvent;
 
 final class OverlaySettings {
+    static final String REMAP_COLOR = "remap_color";
     static final String SIZE = "size_percent";
     private static final String LEGACY_MODIFIER = "modifier_key";
     static final String OVERLAY_BATTERY_PERCENT = "volume_battery_percent";
@@ -15,6 +16,7 @@ final class OverlaySettings {
     static final String SLIDE_IN = "slide_in_ms";
     static final String SLIDE_OUT = "slide_out_ms";
     static final String DISPLAY_TIME = "display_time_ms";
+    static final String BLOCK_METER_STARTER = "block_meter_starter";
     static final String REPEAT = "hold_to_repeat";
     static final String REPEAT_DELAY = "repeat_delay_ms";
     static final String REPEAT_INTERVAL = "repeat_interval_ms";
@@ -108,6 +110,14 @@ final class OverlaySettings {
                 }
             }
             return null;
+        }
+
+        static boolean startsMeterCombo(SharedPreferences settings, int key) {
+            if (key == KeyEvent.KEYCODE_UNKNOWN) return false;
+            for (Binding binding : ALL) {
+                if (!binding.isPerformanceShortcut() && binding.firstKey(settings) == key) return true;
+            }
+            return false;
         }
 
         static boolean startsCombo(SharedPreferences settings, int key) {

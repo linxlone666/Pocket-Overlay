@@ -76,7 +76,8 @@ public final class ShortcutService extends AccessibilityService {
 
     @Override
     protected boolean onKeyEvent(KeyEvent event) {
-        if (navigation != null) {
+        PressedKey existing = findPressed(event);
+        if (existing == null && navigation != null) {
             if (navigation.onKeyEvent(event)) {
                 return true;
             }
@@ -84,7 +85,6 @@ public final class ShortcutService extends AccessibilityService {
                 return false;
             }
         }
-        PressedKey existing = findPressed(event);
         if (event.getAction() == KeyEvent.ACTION_UP) {
             if (existing == null) {
                 return false;
@@ -134,18 +134,23 @@ public final class ShortcutService extends AccessibilityService {
         PressedKey current = new PressedKey(event);
         pressed.add(current);
         if (action == null) {
-            return false;
+            current.consumed = settings.getBoolean(OverlaySettings.BLOCK_METER_STARTER, true)
+                    && Binding.startsMeterCombo(settings, key);
+            return current.consumed;
         }
         if (first == null && startsCombo) {
             // Wait for release so a single press does not fire when used to start a combo.
             current.pending = action;
             current.consumed = true;
-        } else if (applyShortcut(action)) {
-            current.consumed = true;
+        } else {
             if (first != null) {
                 first.pending = null;
             }
-            startRepeat(action, first, current);
+            current.consumed = !action.isPerformanceShortcut();
+            if (applyShortcut(action)) {
+                current.consumed = true;
+                startRepeat(action, first, current);
+            }
         }
         return current.consumed;
     }

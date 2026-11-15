@@ -35,6 +35,7 @@ import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
 import android.widget.ImageButton;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.SeekBar;
@@ -57,17 +58,18 @@ import app.pocketoverlay.OverlaySettings.Binding;
 public final class SetupActivity extends Activity {
     static boolean visible;
     private static final String SELECTED_PAGE = "selected_page";
-    private enum Page { OVERLAY, PERFORMANCE, SETTINGS, NAVIGATION, LIGHTING, ABOUT }
+    private enum Page { OVERLAY, PERFORMANCE, SETTINGS, LIGHTING, ABOUT, REMAP }
     private int background, sidebarColor, surface, accent, textColor, muted, selection;
     private SharedPreferences settings;
     private LinearLayout content;
     private ScrollView scroll;
     private TextView overlayTab;
     private TextView performanceTab;
-    private TextView navigationTab;
     private TextView lightingTab;
+    private TextView remapTab;
+    private RemapDiagram remapDiagram;
     private StickLighting lighting;
-    private NavigationPanel lightingPanel;
+    private LinearLayout lightingControls;
     private Button homeProtection;
     private TextView settingsTab;
     private TextView aboutTab;
@@ -184,6 +186,7 @@ public final class SetupActivity extends Activity {
         page = selected;
         content.removeAllViews();
         bindingButtons.clear();
+        remapDiagram = null;
         performanceEnabled = null;
         performancePin = null;
         homeProtection = null;
@@ -197,17 +200,17 @@ public final class SetupActivity extends Activity {
         permissionsPrompt = null;
         overlayTab.setSelected(page == Page.OVERLAY);
         performanceTab.setSelected(page == Page.PERFORMANCE);
-        navigationTab.setSelected(page == Page.NAVIGATION);
         lightingTab.setSelected(page == Page.LIGHTING);
+        remapTab.setSelected(page == Page.REMAP);
         settingsTab.setSelected(page == Page.SETTINGS);
         aboutTab.setSelected(page == Page.ABOUT);
         switch (page) {
             case OVERLAY: createOverlayPage(); break;
             case PERFORMANCE: createPerformancePage(); break;
             case SETTINGS: createSettingsPage(); break;
-            case NAVIGATION: createNavigationPage(); break;
             case LIGHTING: createLightingPage(); break;
             case ABOUT: createAboutPage(); break;
+            case REMAP: createRemapPage(); break;
         }
         updatePermissions();
         scroll.scrollTo(0, 0);
@@ -267,6 +270,11 @@ public final class SetupActivity extends Activity {
         bindTile(addTile(bindings), Binding.BRIGHTNESS_DOWN);
         bindTile(addTile(bindings), Binding.BRIGHTNESS_UP);
         refreshBindings();
+        addToggle(R.string.block_meter_starter, OverlaySettings.BLOCK_METER_STARTER, true);
+        addText(R.string.block_meter_starter_hint, 13, muted, false, 6);
+        if ("Retroid Pocket 6".equals(Build.MODEL)) {
+            addText(R.string.digital_triggers_hint, 13, muted, false, 6);
+        }
         Switch repeat = addToggle(R.string.hold_to_repeat, OverlaySettings.REPEAT);
         TileGrid timing = new TileGrid();
         Button delay = addChoice(timing, R.string.repeat_delay, OverlaySettings.REPEAT_DELAY,
@@ -728,59 +736,131 @@ public final class SetupActivity extends Activity {
         cards.forEach((preset, card) -> card.setSelected(preset.metrics == metrics));
     }
 
+    private void createRemapPage() {
+        addText(R.string.remap_page, 28, textColor, true, 0);
+        addText(R.string.remap_hint, 14, muted, false, 4);
+        permissionsPrompt = addControl();
+        permissionsPrompt.setText(R.string.permissions_prompt);
+        permissionsPrompt.setOnClickListener(view -> showPage(Page.SETTINGS));
+
+        int[] images = {R.drawable.rp6_silver, R.drawable.rp6_black, R.drawable.rp6_16_bit,
+                R.drawable.rp6_orange, R.drawable.rp6_light_purple};
+        RemapDiagram diagram = new RemapDiagram(this, settings, accent);
+        remapDiagram = diagram;
+        Runnable showColor = () -> {
+            int color = settings.getInt(OverlaySettings.REMAP_COLOR, 3);
+            diagram.setConsoleImage(images[Math.max(0, Math.min(color, images.length - 1))]);
+        };
+        Button color = addControl();
+        configureChoice(color, R.string.remap_color, OverlaySettings.REMAP_COLOR, 3,
+                new int[]{0, 1, 2, 3, 4}, getResources().getStringArray(R.array.rp6_colors), showColor);
+        showColor.run();
+
+        addShoulderRemapBox(diagram, Binding.VOLUME_DOWN, KeyEvent.KEYCODE_BUTTON_L1);
+        addShoulderRemapBox(diagram, Binding.BRIGHTNESS_DOWN, KeyEvent.KEYCODE_BUTTON_L2);
+        addShoulderRemapBox(diagram, Binding.BRIGHTNESS_UP, KeyEvent.KEYCODE_BUTTON_R2);
+        addShoulderRemapBox(diagram, Binding.VOLUME_UP, KeyEvent.KEYCODE_BUTTON_R1);
+        addRemapBox(diagram, Binding.PERFORMANCE_CYCLE, true);
+        addRemapBox(diagram, Binding.PERFORMANCE, false);
+        refreshBindings();
+
+        HorizontalScrollView diagramScroll = new HorizontalScrollView(this);
+        diagramScroll.setFillViewport(true);
+        diagramScroll.setBackground(rounded(sidebarColor, 14));
+        diagramScroll.setPadding(dp(10), dp(12), dp(10), dp(12));
+        diagramScroll.addView(diagram, new FrameLayout.LayoutParams(-2, -2));
+        addRow(diagramScroll, 12);
+
+        addText(R.string.remap_rear_view, 16, accent, true, 16);
+        ImageView rear = new ImageView(this);
+        rear.setImageResource(R.drawable.rp6_rear);
+        rear.setContentDescription(getText(R.string.remap_rear_description));
+        rear.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        rear.setMaxHeight(dp(156));
+        rear.setAdjustViewBounds(true);
+        rear.setPadding(dp(8), dp(8), dp(8), dp(8));
+        rear.setBackground(rounded(sidebarColor, 14));
+        addRow(rear, 8);
+
+        addHomeAndBackControls(diagram);
+    }
+
+    private void addRemapBox(RemapDiagram diagram, Binding binding, boolean leftSide) {
+        Button box = createRemapBox();
+        bindTile(box, binding);
+        diagram.addBinding(binding, box, leftSide);
+    }
+
+    private void addShoulderRemapBox(RemapDiagram diagram, Binding binding, int key) {
+        Button box = createRemapBox();
+        box.setGravity(Gravity.CENTER);
+        box.setTag(keyLabel(key));
+        bindTile(box, binding);
+        diagram.addShoulder(box, key);
+    }
+
+    private Button createRemapBox() {
+        Button box = createControl();
+        box.setTextSize(13);
+        box.setMinHeight(dp(62));
+        box.setPadding(dp(8), dp(6), dp(8), dp(6));
+        box.setBackground(controlBackground(true));
+        return box;
+    }
+
     private void createLightingPage() {
+        addText(R.string.lighting_page, 28, textColor, true, 0);
         if (!"Retroid Pocket 6".equals(Build.MODEL)) {
-            content.addView(label(R.string.navigation_mode_unavailable, 14, textColor, false));
+            addText(R.string.navigation_mode_unavailable, 14, muted, false, 4);
             return;
         }
+        addText(R.string.lighting_page_hint, 14, muted, false, 4);
         permissionsPrompt = addControl();
         permissionsPrompt.setText(R.string.permissions_prompt);
         permissionsPrompt.setOnClickListener(view -> showPage(Page.SETTINGS));
         lighting = StickLighting.acquire(this, settings, new Handler(Looper.getMainLooper()));
         lighting.refreshSettings();
-        lightingPanel = new NavigationPanel(this, settings, R.string.navigation_stick_lighting,
-                R.string.lighting_page_hint);
-        lighting.addControls(lightingPanel, getResources().getConfiguration().screenWidthDp >= 620);
-        content.addView(lightingPanel, new LinearLayout.LayoutParams(-1, -2));
+        lightingControls = new LinearLayout(this);
+        lightingControls.setOrientation(LinearLayout.VERTICAL);
+        NavigationPanel sticks = new NavigationPanel(this, settings, R.string.navigation_stick_lighting, 0);
+        NavigationPanel effects = new NavigationPanel(this, settings, R.string.lighting_effects, 0);
+        sticks.setBackground(rounded(sidebarColor, 14));
+        effects.setBackground(rounded(sidebarColor, 14));
+        lightingControls.addView(sticks, new LinearLayout.LayoutParams(-1, -2));
+        LinearLayout.LayoutParams effectsLayout = new LinearLayout.LayoutParams(-1, -2);
+        effectsLayout.topMargin = dp(10);
+        lightingControls.addView(effects, effectsLayout);
+        lighting.addControls(sticks, getResources().getConfiguration().screenWidthDp >= 620, effects);
+        addRow(lightingControls, 12);
     }
 
     private void closeLightingPage() {
         if (lighting != null) {
             lighting.release();
             lighting = null;
-            lightingPanel = null;
+            lightingControls = null;
         }
     }
 
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
-        if (lightingPanel != null && lightingPanel.findFocus() != null
-                && event.getKeyCode() == KeyEvent.KEYCODE_BUTTON_A) {
+        View focused = lightingControls == null ? null : lightingControls.findFocus();
+        if (focused != null && event.getKeyCode() == KeyEvent.KEYCODE_BUTTON_A) {
             if (event.getAction() == KeyEvent.ACTION_UP && !event.isCanceled()) {
-                lightingPanel.confirmChoice();
+                focused.performClick();
             }
             return true;
         }
         return super.dispatchKeyEvent(event);
     }
 
-    private void createNavigationPage() {
-        addText(R.string.navigation_page, 28, textColor, true, 0);
+    private void addHomeAndBackControls(RemapDiagram diagram) {
+        addText(R.string.navigation_page, 16, accent, true, 20);
         addText(R.string.navigation_intro, 14, muted, false, 4);
-        permissionsPrompt = addControl();
-        permissionsPrompt.setText(R.string.permissions_prompt);
-        permissionsPrompt.setOnClickListener(view -> showPage(Page.SETTINGS));
         addToggle(R.string.navigation_enable, NavigationShortcuts.ENABLED, false);
 
-        LinearLayout home = addNavigationCard(R.string.navigation_home);
-        addNavigationChoice(home, R.string.navigation_tap, NavigationShortcuts.HOME_TAP, NavigationShortcuts.Action.HOME);
-        addNavigationChoice(home, R.string.navigation_double, NavigationShortcuts.HOME_DOUBLE, NavigationShortcuts.Action.RECENTS);
-        addNavigationChoice(home, R.string.navigation_hold, NavigationShortcuts.HOME_HOLD, NavigationShortcuts.Action.MENU);
-
-        LinearLayout back = addNavigationCard(R.string.navigation_back);
-        addNavigationChoice(back, R.string.navigation_tap, NavigationShortcuts.BACK_TAP, NavigationShortcuts.Action.BACK);
-        addNavigationChoice(back, R.string.navigation_double, NavigationShortcuts.BACK_DOUBLE, NavigationShortcuts.Action.NONE);
-        addNavigationChoice(back, R.string.navigation_hold, NavigationShortcuts.BACK_HOLD, NavigationShortcuts.Action.NONE);
+        addSystemRemapBox(diagram, R.string.navigation_home, KeyEvent.KEYCODE_HOME, true);
+        addSystemRemapBox(diagram, R.string.navigation_back, KeyEvent.KEYCODE_BACK, false);
         addText(R.string.navigation_tap_hint, 13, muted, false, 8);
 
         if (Settings.System.getInt(getContentResolver(), NavigationShortcuts.RETROID_HOME_PROTECTION, -1) != -1) {
@@ -791,6 +871,33 @@ public final class SetupActivity extends Activity {
         }
     }
 
+    private void addSystemRemapBox(RemapDiagram diagram, int title, int key, boolean leftSide) {
+        Button box = createRemapBox();
+        box.setText(title);
+        box.setOnClickListener(view -> showNavigationEditor(title, key == KeyEvent.KEYCODE_HOME));
+        diagram.addSystemButton(box, leftSide, key);
+    }
+
+    private void showNavigationEditor(int title, boolean home) {
+        LinearLayout choices = new LinearLayout(this);
+        choices.setOrientation(LinearLayout.VERTICAL);
+        choices.setPadding(dp(16), dp(8), dp(16), dp(8));
+        addNavigationChoice(choices, R.string.navigation_tap,
+                home ? NavigationShortcuts.HOME_TAP : NavigationShortcuts.BACK_TAP,
+                home ? NavigationShortcuts.Action.HOME : NavigationShortcuts.Action.BACK);
+        addNavigationChoice(choices, R.string.navigation_double,
+                home ? NavigationShortcuts.HOME_DOUBLE : NavigationShortcuts.BACK_DOUBLE,
+                home ? NavigationShortcuts.Action.RECENTS : NavigationShortcuts.Action.NONE);
+        addNavigationChoice(choices, R.string.navigation_hold,
+                home ? NavigationShortcuts.HOME_HOLD : NavigationShortcuts.BACK_HOLD,
+                home ? NavigationShortcuts.Action.MENU : NavigationShortcuts.Action.NONE);
+        showPocketDialog(new AlertDialog.Builder(this)
+                .setTitle(title)
+                .setView(choices)
+                .setPositiveButton(android.R.string.ok, null));
+    }
+
+
     private void openRetroidSettings() {
         Intent intent = new Intent().setClassName("com.rp.settings", "com.ro.settings.activity.MainSettingsActivity");
         try {
@@ -798,24 +905,6 @@ public final class SetupActivity extends Activity {
         } catch (ActivityNotFoundException | SecurityException ignored) {
             startActivity(new Intent(Settings.ACTION_SETTINGS));
         }
-    }
-
-    private LinearLayout addNavigationCard(int title) {
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(12), dp(10), dp(12), dp(12));
-        card.setBackground(rounded(sidebarColor, 14));
-        card.addView(label(title, 16, accent, true), new LinearLayout.LayoutParams(-1, -2));
-
-        LinearLayout choices = new LinearLayout(this);
-        boolean wide = getResources().getConfiguration().screenWidthDp >= 720;
-        choices.setOrientation(wide ? LinearLayout.HORIZONTAL : LinearLayout.VERTICAL);
-        choices.setBaselineAligned(false);
-        LinearLayout.LayoutParams choicesLayout = new LinearLayout.LayoutParams(-1, -2);
-        choicesLayout.topMargin = dp(8);
-        card.addView(choices, choicesLayout);
-        addRow(card, 10);
-        return choices;
     }
 
     private void updateHomeProtection() {
@@ -839,17 +928,8 @@ public final class SetupActivity extends Activity {
         button.setTextSize(14);
         button.setMinHeight(dp(58));
         button.setBackground(controlBackground(true));
-        boolean horizontal = choices.getOrientation() == LinearLayout.HORIZONTAL;
-        LinearLayout.LayoutParams layout = horizontal
-                ? new LinearLayout.LayoutParams(0, -1, 1)
-                : new LinearLayout.LayoutParams(-1, -2);
-        if (choices.getChildCount() > 0) {
-            if (horizontal) {
-                layout.setMarginStart(dp(8));
-            } else {
-                layout.topMargin = dp(6);
-            }
-        }
+        LinearLayout.LayoutParams layout = new LinearLayout.LayoutParams(-1, -2);
+        if (choices.getChildCount() > 0) layout.topMargin = dp(6);
         choices.addView(button, layout);
         configureChoice(button, title, key, fallback.ordinal(), values, labels, null);
     }
@@ -1067,8 +1147,8 @@ public final class SetupActivity extends Activity {
 
         overlayTab = addTab(sidebar, R.string.overlay_page, Page.OVERLAY);
         performanceTab = addTab(sidebar, R.string.performance_page, Page.PERFORMANCE);
-        navigationTab = addTab(sidebar, R.string.navigation_page, Page.NAVIGATION);
         lightingTab = addTab(sidebar, R.string.lighting_page, Page.LIGHTING);
+        remapTab = addTab(sidebar, R.string.remap_page, Page.REMAP);
         sidebar.addView(new Space(this), new LinearLayout.LayoutParams(1, 0, 1));
         settingsTab = addTab(sidebar, R.string.settings_page, Page.SETTINGS);
         aboutTab = addTab(sidebar, R.string.about_page, Page.ABOUT);
@@ -1245,6 +1325,7 @@ public final class SetupActivity extends Activity {
 
     private void setChoiceLabel(Button button, int title, String value) {
         String heading = getString(title);
+        if (button.getTag() instanceof String) heading = button.getTag() + " · " + heading;
         SpannableString text = new SpannableString(heading + "\n" + value);
         text.setSpan(new ForegroundColorSpan(muted), heading.length() + 1, text.length(),
                 Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
@@ -1370,6 +1451,7 @@ public final class SetupActivity extends Activity {
     private void refreshBindings() {
         bindingButtons.forEach((binding, button) -> setChoiceLabel(button, binding.title,
                 bindingLabel(binding.firstKey(settings), binding.key(settings))));
+        if (remapDiagram != null) remapDiagram.invalidate();
     }
 
     private String bindingLabel(int first, int key) {

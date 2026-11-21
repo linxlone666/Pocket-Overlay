@@ -54,7 +54,7 @@ final class AppUpdate {
         ByteArrayOutputStream body = new ByteArrayOutputStream();
         HttpURLConnection connection;
         try {
-            connection = connect(new URL(LATEST), "application/vnd.github+json");
+            connection = connect(freshReleaseUrl(LATEST), "application/vnd.github+json");
         } catch (HttpStatusException error) {
             if (error.status != HttpURLConnection.HTTP_FORBIDDEN && error.status != 429) throw error;
             return checkPublicRelease(installedVersion);
@@ -89,8 +89,13 @@ final class AppUpdate {
         throw new IOException("The latest release has no matching APK");
     }
 
+    private static URL freshReleaseUrl(String endpoint) throws IOException {
+        // A cached latest-release response can hide a release that has just been published.
+        return new URL(endpoint + "?check=" + System.currentTimeMillis());
+    }
+
     private static Release checkPublicRelease(String installedVersion) throws IOException {
-        HttpURLConnection page = connect(new URL(PROJECT + "/releases/latest"), "text/html", "HEAD");
+        HttpURLConnection page = connect(freshReleaseUrl(PROJECT + "/releases/latest"), "text/html", "HEAD");
         URL latest;
         try {
             latest = page.getURL();

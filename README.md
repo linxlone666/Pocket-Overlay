@@ -4,7 +4,7 @@ Pocket Plus is a standalone Android app for a controller with digital buttons. B
 
 The app requires Android 9 or later and was tested on a Retroid Pocket 6 running Android 13. It uses Android Accessibility to detect shortcuts and the Modify system settings permission to adjust brightness. The in-app updater connects to GitHub when you check for or download an update.
 
-Open **Volume & Brightness** to change the size, slide durations, time on screen, button bindings, or repeat behavior. Tap one button in the recorder to bind a single press. To record a combo, hold the first button, press the second, and release both. To bind a rear button that does not register, first map it to an unused digital key in your handheld settings. **Settings** contains the permission controls and the Dark, Light, and Material You themes. The selected theme applies to the app and the overlay. Material You uses Android's palette on Android 12 or later.
+Open **Quick Adjust** to change the size, slide durations, time on screen, button bindings, or repeat behavior. Tap one button in the recorder to bind a single press. To record a combo, hold the first button, press the second, and release both. To bind a rear button that does not register, first map it to an unused digital key in your handheld settings. **Settings** contains the permission controls and the Dark, Light, and Material You themes. The selected theme applies to the app and the overlay. Material You uses Android's palette on Android 12 or later.
 
 ## Set up on the Pocket 6
 
@@ -15,11 +15,15 @@ Open **Volume & Brightness** to change the size, slide durations, time on screen
 
 Volume adjusts Android's shared media stream. Volume and brightness combos reserve their first button by default. Turn off **Block shortcut starter input** to let that button reach games on its own. Pocket Plus consumes the shortcut’s digital action button through release. If L2/R2 still affects a game during a shortcut, use **Digital** trigger mode on Retroid to stop separate analog trigger input. If adaptive brightness changes the level back, disable it in Display settings to use manual brightness.
 
-To open ClusterTune's profile picker with the physical Back button, enable **Left-edge profile picker** in ClusterTune under **Settings → Quick access**. In Pocket Plus, enable **Home and Back gestures** and choose **ClusterTune profile picker** by tapping **Back** on the **Button Remap** diagram and opening **Hold**. The shortcut needs the edge handle to be visible in the current app. Press **B** or physical **Back** to close the picker.
+To open ClusterTune's profile picker with the physical Back button, enable **Left-edge profile picker** in ClusterTune under **Settings → Quick access**. In Pocket Plus, enable **Home and Back gestures** and choose **ClusterTune profile picker** under **Button Remap → Home & Back → Back → Hold**. The shortcut needs the edge handle to be visible in the current app. Press **B** or physical **Back** to close the picker.
+
+## Button Remap
+
+Tap a button on the controller diagram to choose the input it sends across apps. Use **Default** to restore the output for the current layout. A custom output overrides the global A/B and X/Y swap. **Controller mode** shows the active firmware mode, and **Test gamepad** shows the inputs Android receives. L2/R2 remapping applies to digital presses.
 
 ## Home and Back gestures
 
-In **Button Remap**, enable **Home and Back gestures**, then tap **Home** or **Back** on the controller diagram to customize tap, double tap, and hold. Home defaults to Home on tap, Recent apps on double tap, and a Quick actions menu on hold. In Quick actions, press Start for Fan mode, L2 for Perf mode, or A to pin or unpin the HUD. Press the button shown next to a mode to apply it. In Recent apps, use D-pad Left or Right to browse, A to open, Y to close the centered app, or B to return to Home. Turn off Retroid accidental Home protection on the same page if the firmware requires two presses.
+In **Button Remap**, enable **Home and Back gestures**, then choose actions directly under **Home** or **Back** for tap, double tap, and hold. Home defaults to Home on tap, Recent apps on double tap, and a Quick actions menu on hold. In Quick actions, press Start for Fan mode, L2 for Perf mode, or A to pin or unpin the HUD. Press the button shown next to a mode to apply it. In Recent apps, use D-pad Left or Right to browse, A to open, Y to close the centered app, Select to clear all on the Pocket 6 in landscape, or B to return to Home. Turn off Retroid accidental Home protection on the same page if the firmware requires two presses.
 
 ## Performance overlay
 

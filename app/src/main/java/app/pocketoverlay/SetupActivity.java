@@ -11,7 +11,10 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.SharedPreferences;
 import android.content.res.ColorStateList;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Typeface;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.StateListDrawable;
 import android.net.Uri;
@@ -23,7 +26,11 @@ import android.provider.Settings;
 import android.text.InputType;
 import android.text.SpannableString;
 import android.text.Spanned;
+import android.text.TextUtils;
+import android.text.style.ImageSpan;
 import android.text.style.ForegroundColorSpan;
+import android.text.style.RelativeSizeSpan;
+import android.text.style.StyleSpan;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.Window;
@@ -68,6 +75,9 @@ public final class SetupActivity extends Activity {
     private TextView lightingTab;
     private TextView remapTab;
     private RemapDiagram remapDiagram;
+    private Bitmap remapArtwork;
+    private static final int[] CONSOLE_ARTWORK = {R.drawable.rp6_silver, R.drawable.rp6_black,
+            R.drawable.rp6_16_bit, R.drawable.rp6_orange, R.drawable.rp6_light_purple};
     private StickLighting lighting;
     private LinearLayout lightingControls;
     private Button homeProtection;
@@ -89,6 +99,14 @@ public final class SetupActivity extends Activity {
     private PermissionCard shortcutPermission;
     private PermissionCard brightnessPermission;
     private Button permissionsPrompt;
+    private ControllerRemap controllerRemap;
+    private final EnumMap<ControllerRemap.Source, Button> outputButtons =
+            new EnumMap<>(ControllerRemap.Source.class);
+    private TextView controllerMode;
+    private Button gamepadTest;
+    private Switch faceSwapToggle;
+    private TextView faceSwapStatus;
+    private final Runnable remapChanged = this::updateRemapControls;
     private Switch performanceEnabled;
     private Button[] performanceLayouts;
     private Button performancePin;
@@ -187,6 +205,12 @@ public final class SetupActivity extends Activity {
         content.removeAllViews();
         bindingButtons.clear();
         remapDiagram = null;
+        remapArtwork = null;
+        outputButtons.clear();
+        controllerMode = null;
+        gamepadTest = null;
+        faceSwapToggle = null;
+        faceSwapStatus = null;
         performanceEnabled = null;
         performancePin = null;
         homeProtection = null;
@@ -218,7 +242,7 @@ public final class SetupActivity extends Activity {
     }
 
     private void createOverlayPage() {
-        addText(R.string.overlay_page, 28, textColor, true, 0);
+        addText(R.string.meters_title, 28, textColor, true, 0);
         addText(R.string.setup_intro, 14, muted, false, 4);
         permissionsPrompt = addControl();
         permissionsPrompt.setText(R.string.permissions_prompt);
@@ -239,8 +263,7 @@ public final class SetupActivity extends Activity {
             volumePreview.run();
             brightnessPreview.run();
         }));
-        addRow(batteryIcon, 6);
-        Switch slide = addToggle(R.string.slide_animation, OverlaySettings.SLIDE);
+        addRow(batteryIcon, 8);
         TileGrid appearance = new TileGrid();
         addChoice(appearance, R.string.overlay_size, OverlaySettings.SIZE, OverlaySettings.DEFAULT_SIZE,
                 new int[]{75, 90, 100, 110, 125},
@@ -248,12 +271,16 @@ public final class SetupActivity extends Activity {
                     volumePreview.run();
                     brightnessPreview.run();
                 });
-        Button enter = addDuration(appearance, R.string.slide_in_time, OverlaySettings.SLIDE_IN,
-                OverlaySettings.DEFAULT_SLIDE_IN, 0, 2000);
-        Button exit = addDuration(appearance, R.string.slide_out_time, OverlaySettings.SLIDE_OUT,
-                OverlaySettings.DEFAULT_SLIDE_OUT, 0, 2000);
         addDuration(appearance, R.string.display_time, OverlaySettings.DISPLAY_TIME,
                 OverlaySettings.DEFAULT_DISPLAY_TIME, 250, 10000);
+
+        addText(R.string.meters_animation, 16, accent, true, 20);
+        Switch slide = addToggle(R.string.slide_animation, OverlaySettings.SLIDE);
+        TileGrid animation = new TileGrid();
+        Button enter = addDuration(animation, R.string.slide_in_time, OverlaySettings.SLIDE_IN,
+                OverlaySettings.DEFAULT_SLIDE_IN, 0, 2000);
+        Button exit = addDuration(animation, R.string.slide_out_time, OverlaySettings.SLIDE_OUT,
+                OverlaySettings.DEFAULT_SLIDE_OUT, 0, 2000);
         enter.setEnabled(slide.isChecked());
         exit.setEnabled(slide.isChecked());
         slide.setOnCheckedChangeListener((button, checked) -> {
@@ -736,6 +763,43 @@ public final class SetupActivity extends Activity {
         cards.forEach((preset, card) -> card.setSelected(preset.metrics == metrics));
     }
 
+    private void updateRemapControls() {
+        if (faceSwapToggle == null || controllerRemap == null) return;
+        ControllerRemap.Mode mode = controllerRemap.activeMode();
+        controllerMode.setText(mode == null ? R.string.remap_mode_unavailable : mode.label);
+        gamepadTest.setEnabled(mode != null && mode != ControllerRemap.Mode.OFF);
+        faceSwapToggle.setOnCheckedChangeListener(null);
+        faceSwapToggle.setChecked(controllerRemap.swapEnabled());
+        faceSwapToggle.setEnabled(controllerRemap.available());
+        faceSwapStatus.setText(controllerRemap.failed() ? R.string.remap_swap_failed
+                : controllerRemap.available() ? R.string.remap_swap_hint : R.string.remap_swap_connecting);
+        outputButtons.forEach((source, button) -> {
+            showButtonArt(button, source, controllerRemap.effectiveOutput(source));
+            button.setEnabled(controllerRemap.available());
+        });
+        faceSwapToggle.setOnCheckedChangeListener((button, checked) -> {
+            controllerRemap.setSwapEnabled(checked);
+            updateRemapControls();
+        });
+    }
+
+    private void showGamepadTest() {
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setPadding(dp(12), dp(6), dp(12), 0);
+        panel.addView(label(R.string.remap_gamepad_hint, 13, muted, false));
+        GamepadTestView gamepad = new GamepadTestView(this, remapArtwork, accent, textColor, this::keyLabel);
+        int height = (int) (getResources().getConfiguration().screenHeightDp * 0.65f);
+        panel.addView(gamepad, new LinearLayout.LayoutParams(-1, dp(height)));
+        AlertDialog dialog = showPocketDialog(new AlertDialog.Builder(this)
+                .setTitle(R.string.remap_test_gamepad)
+                .setView(panel)
+                .setPositiveButton(android.R.string.ok, null));
+        dialog.getWindow().setLayout((int) (getResources().getDisplayMetrics().widthPixels * 0.94f), -2);
+        dialog.setOnKeyListener((popup, key, event) -> gamepad.recordKey(event));
+        gamepad.requestFocus();
+    }
+
     private void createRemapPage() {
         addText(R.string.remap_page, 28, textColor, true, 0);
         addText(R.string.remap_hint, 14, muted, false, 4);
@@ -743,26 +807,68 @@ public final class SetupActivity extends Activity {
         permissionsPrompt.setText(R.string.permissions_prompt);
         permissionsPrompt.setOnClickListener(view -> showPage(Page.SETTINGS));
 
-        int[] images = {R.drawable.rp6_silver, R.drawable.rp6_black, R.drawable.rp6_16_bit,
-                R.drawable.rp6_orange, R.drawable.rp6_light_purple};
-        RemapDiagram diagram = new RemapDiagram(this, settings, accent);
+        if (controllerRemap == null) {
+            controllerRemap = ControllerRemap.acquire(this, settings);
+            if (controllerRemap != null) controllerRemap.addListener(remapChanged);
+        }
+        if (controllerRemap != null) {
+            faceSwapToggle = createToggle(R.string.remap_swap_faces, controllerRemap.swapEnabled());
+            addRow(faceSwapToggle, 12);
+            faceSwapStatus = label(getText(R.string.remap_swap_connecting), 13, muted, false);
+            addRow(faceSwapStatus, 4);
+        }
+
+        RemapDiagram diagram = new RemapDiagram(this, accent);
         remapDiagram = diagram;
         Runnable showColor = () -> {
-            int color = settings.getInt(OverlaySettings.REMAP_COLOR, 3);
-            diagram.setConsoleImage(images[Math.max(0, Math.min(color, images.length - 1))]);
+            int image = consoleArtworkResource();
+            remapArtwork = BitmapFactory.decodeResource(getResources(), image);
+            diagram.setConsoleImage(image);
+            updateRemapControls();
+            refreshBindings();
         };
-        Button color = addControl();
+        Button color = createControl();
         configureChoice(color, R.string.remap_color, OverlaySettings.REMAP_COLOR, 3,
                 new int[]{0, 1, 2, 3, 4}, getResources().getStringArray(R.array.rp6_colors), showColor);
+        LinearLayout tools = new LinearLayout(this);
+        tools.setBaselineAligned(false);
+        if (getResources().getConfiguration().screenWidthDp < 600) {
+            tools.setOrientation(LinearLayout.VERTICAL);
+        }
+        addRemapTool(tools, color);
+        if (controllerRemap != null) {
+            LinearLayout modeStatus = new LinearLayout(this);
+            modeStatus.setOrientation(LinearLayout.VERTICAL);
+            modeStatus.setPadding(dp(14), dp(9), dp(14), dp(9));
+            modeStatus.setGravity(Gravity.CENTER_VERTICAL);
+            modeStatus.setBackground(rounded(sidebarColor, 10));
+            modeStatus.addView(label(R.string.remap_mode_title, 12, muted, false));
+            controllerMode = label(R.string.remap_mode_unavailable, 14, textColor, true);
+            modeStatus.addView(controllerMode);
+            addRemapTool(tools, modeStatus);
+            gamepadTest = createControl();
+            setChoiceLabel(gamepadTest, R.string.remap_test_gamepad, getText(R.string.remap_test_live));
+            gamepadTest.setOnClickListener(view -> showGamepadTest());
+            addRemapTool(tools, gamepadTest);
+        }
+        addRow(tools, 12);
         showColor.run();
 
-        addShoulderRemapBox(diagram, Binding.VOLUME_DOWN, KeyEvent.KEYCODE_BUTTON_L1);
-        addShoulderRemapBox(diagram, Binding.BRIGHTNESS_DOWN, KeyEvent.KEYCODE_BUTTON_L2);
-        addShoulderRemapBox(diagram, Binding.BRIGHTNESS_UP, KeyEvent.KEYCODE_BUTTON_R2);
-        addShoulderRemapBox(diagram, Binding.VOLUME_UP, KeyEvent.KEYCODE_BUTTON_R1);
-        addRemapBox(diagram, Binding.PERFORMANCE_CYCLE, true);
-        addRemapBox(diagram, Binding.PERFORMANCE, false);
-        refreshBindings();
+        for (ControllerRemap.Source source : new ControllerRemap.Source[]{
+                ControllerRemap.Source.L1, ControllerRemap.Source.L2,
+                ControllerRemap.Source.R2, ControllerRemap.Source.R1}) {
+            diagram.addShoulder(createOutputButton(source), source.key);
+        }
+        ControllerRemap.Source[] left = {ControllerRemap.Source.SELECT, ControllerRemap.Source.L3,
+                ControllerRemap.Source.UP, ControllerRemap.Source.LEFT, ControllerRemap.Source.RIGHT,
+                ControllerRemap.Source.DOWN, ControllerRemap.Source.HOME};
+        ControllerRemap.Source[] right = {ControllerRemap.Source.START, ControllerRemap.Source.X,
+                ControllerRemap.Source.Y, ControllerRemap.Source.A, ControllerRemap.Source.B,
+                ControllerRemap.Source.R3, ControllerRemap.Source.BACK};
+        for (int index = 0; index < left.length; index++) {
+            diagram.addSystemButton(createOutputButton(left[index]), true, left[index].key);
+            diagram.addSystemButton(createOutputButton(right[index]), false, right[index].key);
+        }
 
         HorizontalScrollView diagramScroll = new HorizontalScrollView(this);
         diagramScroll.setFillViewport(true);
@@ -782,21 +888,79 @@ public final class SetupActivity extends Activity {
         rear.setBackground(rounded(sidebarColor, 14));
         addRow(rear, 8);
 
-        addHomeAndBackControls(diagram);
+        TileGrid rearButtons = new TileGrid();
+        rearButtons.add(createOutputButton(ControllerRemap.Source.M1));
+        rearButtons.add(createOutputButton(ControllerRemap.Source.M2));
+        addHomeAndBackControls();
+        addText(R.string.shortcuts_section, 16, accent, true, 20);
+        TileGrid shortcuts = new TileGrid();
+        bindTile(addTile(shortcuts), Binding.VOLUME_DOWN);
+        bindTile(addTile(shortcuts), Binding.VOLUME_UP);
+        bindTile(addTile(shortcuts), Binding.BRIGHTNESS_DOWN);
+        bindTile(addTile(shortcuts), Binding.BRIGHTNESS_UP);
+        bindTile(addTile(shortcuts), Binding.PERFORMANCE);
+        bindTile(addTile(shortcuts), Binding.PERFORMANCE_CYCLE);
+        refreshBindings();
+        updateRemapControls();
     }
 
-    private void addRemapBox(RemapDiagram diagram, Binding binding, boolean leftSide) {
-        Button box = createRemapBox();
-        bindTile(box, binding);
-        diagram.addBinding(binding, box, leftSide);
+    private void addRemapTool(LinearLayout row, View tool) {
+        boolean stacked = row.getOrientation() == LinearLayout.VERTICAL;
+        LinearLayout.LayoutParams params = stacked
+                ? new LinearLayout.LayoutParams(-1, -2)
+                : new LinearLayout.LayoutParams(0, -1, 1);
+        if (row.getChildCount() > 0) {
+            if (stacked) params.topMargin = dp(8);
+            else params.setMarginStart(dp(8));
+        }
+        row.addView(tool, params);
     }
 
-    private void addShoulderRemapBox(RemapDiagram diagram, Binding binding, int key) {
-        Button box = createRemapBox();
-        box.setGravity(Gravity.CENTER);
-        box.setTag(keyLabel(key));
-        bindTile(box, binding);
-        diagram.addShoulder(box, key);
+    private String outputLabel(ControllerRemap.Source source) {
+        if (source == ControllerRemap.Source.M1 || source == ControllerRemap.Source.M2) return source.input;
+        return keyLabel(source.key);
+    }
+
+    private Button createOutputButton(ControllerRemap.Source source) {
+        Button button = createRemapBox();
+        button.setGravity(Gravity.CENTER);
+        button.setMinHeight(dp(38));
+        button.setPadding(dp(6), dp(4), dp(6), dp(4));
+        outputButtons.put(source, button);
+        button.setEnabled(controllerRemap != null && controllerRemap.available());
+        showButtonArt(button, source, KeyEvent.KEYCODE_UNKNOWN);
+        button.setOnClickListener(view -> showOutputPicker(source));
+        return button;
+    }
+
+    private void showButtonArt(Button button, ControllerRemap.Source source, int output) {
+        String sourceLabel = outputLabel(source);
+        String outputLabel = keyLabel(output);
+        boolean rear = source == ControllerRemap.Source.M1 || source == ControllerRemap.Source.M2;
+        RemapButtonArt art = new RemapButtonArt(remapArtwork, source.key, rear, sourceLabel,
+                output, outputLabel, accent);
+        art.setBounds(0, 0, dp(output == KeyEvent.KEYCODE_UNKNOWN ? 28 : 80), dp(28));
+        button.setCompoundDrawables(null, art, null, null);
+        button.setContentDescription(output == KeyEvent.KEYCODE_UNKNOWN ? sourceLabel
+                : getString(R.string.remap_output_description, sourceLabel, outputLabel));
+    }
+
+    private void showOutputPicker(ControllerRemap.Source source) {
+        if (controllerRemap == null || !controllerRemap.available()) return;
+        int[] outputs = ControllerRemap.OUTPUTS;
+        String[] labels = new String[outputs.length];
+        labels[0] = getString(R.string.remap_output_default,
+                keyLabel(controllerRemap.layoutOutput(source, controllerRemap.swapEnabled())));
+        for (int index = 1; index < labels.length; index++) labels[index] = keyLabel(outputs[index]);
+        int selected = choiceIndex(controllerRemap.output(source), outputs);
+        showPocketDialog(new AlertDialog.Builder(this)
+                .setTitle(getString(R.string.remap_send_button, outputLabel(source)))
+                .setSingleChoiceItems(labels, selected, (dialog, which) -> {
+                    controllerRemap.setOutput(source, outputs[which]);
+                    updateRemapControls();
+                    dialog.dismiss();
+                })
+                .setNegativeButton(android.R.string.cancel, null));
     }
 
     private Button createRemapBox() {
@@ -854,13 +1018,14 @@ public final class SetupActivity extends Activity {
         return super.dispatchKeyEvent(event);
     }
 
-    private void addHomeAndBackControls(RemapDiagram diagram) {
+    private void addHomeAndBackControls() {
         addText(R.string.navigation_page, 16, accent, true, 20);
         addText(R.string.navigation_intro, 14, muted, false, 4);
         addToggle(R.string.navigation_enable, NavigationShortcuts.ENABLED, false);
 
-        addSystemRemapBox(diagram, R.string.navigation_home, KeyEvent.KEYCODE_HOME, true);
-        addSystemRemapBox(diagram, R.string.navigation_back, KeyEvent.KEYCODE_BACK, false);
+        TileGrid gestures = new TileGrid();
+        gestures.add(createNavigationChoices(true));
+        gestures.add(createNavigationChoices(false));
         addText(R.string.navigation_tap_hint, 13, muted, false, 8);
 
         if (Settings.System.getInt(getContentResolver(), NavigationShortcuts.RETROID_HOME_PROTECTION, -1) != -1) {
@@ -871,17 +1036,13 @@ public final class SetupActivity extends Activity {
         }
     }
 
-    private void addSystemRemapBox(RemapDiagram diagram, int title, int key, boolean leftSide) {
-        Button box = createRemapBox();
-        box.setText(title);
-        box.setOnClickListener(view -> showNavigationEditor(title, key == KeyEvent.KEYCODE_HOME));
-        diagram.addSystemButton(box, leftSide, key);
-    }
-
-    private void showNavigationEditor(int title, boolean home) {
+    private LinearLayout createNavigationChoices(boolean home) {
         LinearLayout choices = new LinearLayout(this);
         choices.setOrientation(LinearLayout.VERTICAL);
-        choices.setPadding(dp(16), dp(8), dp(16), dp(8));
+        choices.setPadding(dp(10), dp(8), dp(10), dp(10));
+        choices.setBackground(rounded(sidebarColor, 14));
+        choices.addView(label(getText(home ? R.string.navigation_home : R.string.navigation_back),
+                15, accent, true));
         addNavigationChoice(choices, R.string.navigation_tap,
                 home ? NavigationShortcuts.HOME_TAP : NavigationShortcuts.BACK_TAP,
                 home ? NavigationShortcuts.Action.HOME : NavigationShortcuts.Action.BACK);
@@ -891,12 +1052,8 @@ public final class SetupActivity extends Activity {
         addNavigationChoice(choices, R.string.navigation_hold,
                 home ? NavigationShortcuts.HOME_HOLD : NavigationShortcuts.BACK_HOLD,
                 home ? NavigationShortcuts.Action.MENU : NavigationShortcuts.Action.NONE);
-        showPocketDialog(new AlertDialog.Builder(this)
-                .setTitle(title)
-                .setView(choices)
-                .setPositiveButton(android.R.string.ok, null));
+        return choices;
     }
-
 
     private void openRetroidSettings() {
         Intent intent = new Intent().setClassName("com.rp.settings", "com.ro.settings.activity.MainSettingsActivity");
@@ -944,7 +1101,9 @@ public final class SetupActivity extends Activity {
                 R.string.brightness_open, new Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS,
                         Uri.fromParts("package", getPackageName(), null)));
         addText(R.string.appearance_section, 16, accent, true, 20);
-        addChoice(new TileGrid(), R.string.app_theme, OverlaySettings.THEME, OverlaySettings.DARK,
+        Button theme = createControl();
+        addRow(theme, 8);
+        configureChoice(theme, R.string.app_theme, OverlaySettings.THEME, OverlaySettings.DARK,
                 new int[]{OverlaySettings.DARK, OverlaySettings.LIGHT, OverlaySettings.MATERIAL_YOU},
                 getResources().getStringArray(R.array.app_themes), this::recreate);
         addText(R.string.theme_hint, 14, muted, false, 8);
@@ -1147,8 +1306,8 @@ public final class SetupActivity extends Activity {
 
         overlayTab = addTab(sidebar, R.string.overlay_page, Page.OVERLAY);
         performanceTab = addTab(sidebar, R.string.performance_page, Page.PERFORMANCE);
-        lightingTab = addTab(sidebar, R.string.lighting_page, Page.LIGHTING);
         remapTab = addTab(sidebar, R.string.remap_page, Page.REMAP);
+        lightingTab = addTab(sidebar, R.string.lighting_page, Page.LIGHTING);
         sidebar.addView(new Space(this), new LinearLayout.LayoutParams(1, 0, 1));
         settingsTab = addTab(sidebar, R.string.settings_page, Page.SETTINGS);
         aboutTab = addTab(sidebar, R.string.about_page, Page.ABOUT);
@@ -1159,10 +1318,13 @@ public final class SetupActivity extends Activity {
     }
 
     private TextView addTab(LinearLayout sidebar, int title, Page destination) {
-        TextView tab = label(title, 14, accent, true);
+        TextView tab = label(title, 14, muted, true);
+        tab.setTextColor(new ColorStateList(
+                new int[][]{{android.R.attr.state_selected}, new int[0]}, new int[]{accent, muted}));
+        tab.setFocusable(true);
         tab.setGravity(Gravity.CENTER_VERTICAL);
         tab.setPadding(dp(10), dp(11), dp(10), dp(11));
-        tab.setBackground(controlBackground());
+        tab.setBackground(controlBackground(false, android.graphics.Color.TRANSPARENT));
         tab.setOnClickListener(view -> {
             if (page == destination) {
                 scroll.smoothScrollTo(0, 0);
@@ -1170,7 +1332,9 @@ public final class SetupActivity extends Activity {
                 showPage(destination);
             }
         });
-        sidebar.addView(tab, new LinearLayout.LayoutParams(-1, -2));
+        LinearLayout.LayoutParams layout = new LinearLayout.LayoutParams(-1, -2);
+        layout.topMargin = dp(3);
+        sidebar.addView(tab, layout);
         return tab;
     }
 
@@ -1280,11 +1444,11 @@ public final class SetupActivity extends Activity {
                 row = new LinearLayout(SetupActivity.this);
                 row.setBaselineAligned(false);
                 addRow(row, 8);
-                row.addView(tile, new LinearLayout.LayoutParams(0, -2, 1));
+                row.addView(tile, new LinearLayout.LayoutParams(0, -1, 1));
                 row.addView(new Space(SetupActivity.this), new LinearLayout.LayoutParams(0, 1, 1));
             } else {
                 row.removeViewAt(1);
-                LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, -2, 1);
+                LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, -1, 1);
                 params.setMarginStart(dp(8));
                 row.addView(tile, params);
             }
@@ -1308,6 +1472,8 @@ public final class SetupActivity extends Activity {
     private Button createControl() {
         Button button = new Button(this);
         button.setAllCaps(false);
+        button.setTextColor(new ColorStateList(
+                new int[][]{{-android.R.attr.state_enabled}, new int[0]}, new int[]{muted, textColor}));
         button.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
         button.setPadding(dp(14), dp(9), dp(14), dp(9));
         button.setMinHeight(dp(48));
@@ -1323,12 +1489,22 @@ public final class SetupActivity extends Activity {
         return button;
     }
 
-    private void setChoiceLabel(Button button, int title, String value) {
+    private void setChoiceLabel(Button button, int title, CharSequence value) {
         String heading = getString(title);
         if (button.getTag() instanceof String) heading = button.getTag() + " · " + heading;
-        SpannableString text = new SpannableString(heading + "\n" + value);
-        text.setSpan(new ForegroundColorSpan(muted), heading.length() + 1, text.length(),
-                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        SpannableString text = new SpannableString(TextUtils.concat(heading, "\n", value));
+        int valueStart = heading.length() + 1;
+        text.setSpan(new ForegroundColorSpan(muted), 0, heading.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        text.setSpan(new RelativeSizeSpan(0.86f), 0, heading.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        if (value.length() > 0) {
+            text.setSpan(new StyleSpan(Typeface.BOLD), valueStart, text.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
+        button.setTypeface(Typeface.DEFAULT);
+        button.setLineSpacing(dp(3), 1f);
+        Drawable chevron = getDrawable(R.drawable.ic_setting_chevron).mutate();
+        chevron.setTint(muted);
+        button.setCompoundDrawablePadding(dp(10));
+        button.setCompoundDrawablesRelativeWithIntrinsicBounds(null, null, chevron, null);
         button.setText(text);
     }
 
@@ -1449,9 +1625,36 @@ public final class SetupActivity extends Activity {
     }
 
     private void refreshBindings() {
-        bindingButtons.forEach((binding, button) -> setChoiceLabel(button, binding.title,
-                bindingLabel(binding.firstKey(settings), binding.key(settings))));
+        bindingButtons.forEach(this::showBinding);
         if (remapDiagram != null) remapDiagram.invalidate();
+    }
+
+    private int consoleArtworkResource() {
+        int color = settings.getInt(OverlaySettings.REMAP_COLOR, 3);
+        return CONSOLE_ARTWORK[Math.max(0, Math.min(color, CONSOLE_ARTWORK.length - 1))];
+    }
+
+    private void showBinding(Binding binding, Button button) {
+        int key = binding.key(settings);
+        int first = binding.firstKey(settings);
+        String assignment = bindingLabel(first, key);
+        if (key == KeyEvent.KEYCODE_UNKNOWN) {
+            setChoiceLabel(button, binding.title, assignment);
+            button.setContentDescription(null);
+            return;
+        }
+        if (remapArtwork == null) {
+            remapArtwork = BitmapFactory.decodeResource(getResources(), consoleArtworkResource());
+        }
+        boolean combo = first != KeyEvent.KEYCODE_UNKNOWN;
+        int source = combo ? first : key;
+        RemapButtonArt art = new RemapButtonArt(remapArtwork, source, false, keyLabel(source),
+                combo ? key : KeyEvent.KEYCODE_UNKNOWN, keyLabel(key), accent, true);
+        art.setBounds(0, 0, dp(combo ? 76 : 26), dp(26));
+        SpannableString pictures = new SpannableString("\uFFFC");
+        pictures.setSpan(new ImageSpan(art), 0, pictures.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        setChoiceLabel(button, binding.title, pictures);
+        button.setContentDescription(getString(binding.title) + ", " + assignment);
     }
 
     private String bindingLabel(int first, int key) {
@@ -1461,6 +1664,14 @@ public final class SetupActivity extends Activity {
 
     private String keyLabel(int key) {
         switch (key) {
+            case KeyEvent.KEYCODE_BUTTON_THUMBL: return "L3";
+            case KeyEvent.KEYCODE_BUTTON_THUMBR: return "R3";
+            case KeyEvent.KEYCODE_HOME: return getString(R.string.navigation_home);
+            case KeyEvent.KEYCODE_BACK: return getString(R.string.navigation_back);
+            case KeyEvent.KEYCODE_DPAD_UP: return "D-pad ↑";
+            case KeyEvent.KEYCODE_DPAD_DOWN: return "D-pad ↓";
+            case KeyEvent.KEYCODE_DPAD_LEFT: return "D-pad ←";
+            case KeyEvent.KEYCODE_DPAD_RIGHT: return "D-pad →";
             case KeyEvent.KEYCODE_UNKNOWN: return getString(R.string.shortcut_unassigned);
             case KeyEvent.KEYCODE_BUTTON_SELECT: return getString(R.string.button_select);
             case KeyEvent.KEYCODE_BUTTON_START: return getString(R.string.button_start);
@@ -1520,6 +1731,10 @@ public final class SetupActivity extends Activity {
     }
 
     private StateListDrawable controlBackground(boolean outlineSelection) {
+        return controlBackground(outlineSelection, surface);
+    }
+
+    private StateListDrawable controlBackground(boolean outlineSelection, int idleColor) {
         StateListDrawable background = new StateListDrawable();
         GradientDrawable focused = rounded(selection, 10);
         focused.setStroke(dp(2), accent);
@@ -1530,7 +1745,7 @@ public final class SetupActivity extends Activity {
             selected.setStroke(dp(1), accent);
         }
         background.addState(new int[]{android.R.attr.state_selected}, selected);
-        GradientDrawable idle = rounded(surface, 10);
+        GradientDrawable idle = rounded(idleColor, 10);
         if (outlineSelection) {
             idle.setStroke(dp(1), selection);
         }
@@ -1552,6 +1767,7 @@ public final class SetupActivity extends Activity {
         }
         updatePermissions();
         updateHomeProtection();
+        updateRemapControls();
     }
 
     @Override
@@ -1565,6 +1781,11 @@ public final class SetupActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        if (controllerRemap != null) {
+            controllerRemap.removeListener(remapChanged);
+            controllerRemap.release();
+            controllerRemap = null;
+        }
         updateWorker.shutdownNow();
         closeLightingPage();
         settings.unregisterOnSharedPreferenceChangeListener(performanceState);

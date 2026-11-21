@@ -2,7 +2,9 @@
 <resources>
     <string name="app_name">Pocket Plus</string>
     <string name="service_description">Listens for controller shortcuts and sends taps or swipes in Recent apps. The service does not read screen content.</string>
-    <string name="overlay_page">Volume &amp; Brightness</string>
+    <string name="overlay_page">Quick Adjust</string>
+    <string name="meters_title">Volume &amp; Brightness</string>
+    <string name="meters_animation">Animation</string>
     <string name="navigation_page">Home &amp; Back</string>
     <string name="navigation_intro">Map the physical Home and Back buttons on your Retroid Pocket 6.</string>
     <string name="navigation_enable">Enable Home and Back gestures</string>
@@ -91,6 +93,8 @@
     <string name="navigation_back_to_launcher">Back to launcher</string>
     <string name="navigation_open_app">Open app</string>
     <string name="navigation_dismiss_app">Close app</string>
+    <string name="navigation_clear_all">Clear all</string>
+    <string name="navigation_clear_all_unavailable">Clear all is available in Retroid’s landscape Recent apps screen.</string>
     <string name="navigation_screenshot">Screenshot</string>
     <string name="navigation_mute">Mute or unmute media</string>
     <string name="navigation_cluster_tune">ClusterTune profile picker</string>
@@ -282,7 +286,7 @@
     <string name="remap_page">Button Remap</string>
     <string name="remap_rear_view">Rear view</string>
     <string name="remap_rear_description">Back of the Retroid Pocket 6 showing the M1 and M2 buttons</string>
-    <string name="remap_hint">Tap a box to record a Pocket Plus shortcut. The line points to its assigned button.</string>
+    <string name="remap_hint">Tap a button box to choose the input it sends across apps.</string>
     <string name="remap_color">Console color</string>
     <string-array name="rp6_colors">
         <item>Silver</item>
@@ -291,4 +295,21 @@
         <item>Orange</item>
         <item>Light Purple</item>
     </string-array>
+    <string name="remap_swap_faces">Swap A/B and X/Y globally</string>
+    <string name="remap_swap_hint">Custom button outputs override this swap. Enable Controller shortcuts in Settings to restore mappings after restarting. L2/R2 mappings control digital presses.</string>
+    <string name="remap_swap_connecting">Connecting to Retroid button mapping…</string>
+    <string name="remap_swap_failed">Retroid button mapping is unavailable. The swap could not be applied.</string>
+    <string name="remap_send_button">%1$s · Send button</string>
+    <string name="remap_output_default">Default (%1$s)</string>
+    <string name="remap_output_description">%1$s sends %2$s</string>
+    <string name="remap_mode_title">Controller mode</string>
+    <string name="remap_mode_retro">Retro</string>
+    <string name="remap_mode_xbox">Xbox</string>
+    <string name="remap_mode_unavailable">No built-in controller detected</string>
+    <string name="remap_mode_off">Off</string>
+    <string name="remap_test_gamepad">Test gamepad</string>
+    <string name="remap_test_live">Live inputs</string>
+    <string name="remap_gamepad_hint">Press buttons or move the sticks and triggers to see what Android receives.</string>
+    <string name="remap_test_last">Last button: %1$s</string>
+    <string name="remap_test_sticks">Left stick X %1$d · Y %2$d     Right stick X %3$d · Y %4$d</string>
 </resources>

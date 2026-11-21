@@ -98,7 +98,7 @@ final class NavigationShortcuts {
     private final ArrayDeque<RecentInput> recentInputs = new ArrayDeque<>();
     private final Runnable processRecentInputs = this::processRecentInputs;
 
-    private enum RecentInput { PREVIOUS, NEXT, OPEN, DISMISS }
+    private enum RecentInput { PREVIOUS, NEXT, OPEN, DISMISS, CLEAR_ALL }
 
     NavigationShortcuts(AccessibilityService service, SharedPreferences settings, Handler handler) {
         this.service = service;
@@ -163,7 +163,7 @@ final class NavigationShortcuts {
             return true;
         }
         InputDevice device = event.getDevice();
-        if (device == null || device.getVendorId() != 0x2022 || device.getProductId() != 0x3001
+        if (device == null || device.getVendorId() != 0x2022 || (device.getProductId() != 0x3001 && device.getProductId() != 0x3002)
                 || event.getScanCode() == 0) {
             return false;
         }
@@ -621,9 +621,9 @@ final class NavigationShortcuts {
         recent.addActionRow(new int[]{R.string.navigation_key_left, R.string.navigation_key_right, R.string.navigation_key_a},
                 new int[]{R.string.navigation_previous, R.string.navigation_next, R.string.navigation_open_app},
                 new Runnable[]{() -> browseRecents(-1), () -> browseRecents(1), this::openCenteredRecent});
-        recent.addActionRow(new int[]{R.string.navigation_key_y, R.string.navigation_key_b},
-                new int[]{R.string.navigation_dismiss_app, R.string.navigation_back_to_launcher},
-                new Runnable[]{this::dismissCenteredRecent, this::exitRecentsToHome});
+        recent.addActionRow(new int[]{R.string.navigation_key_y, R.string.navigation_key_select, R.string.navigation_key_b},
+                new int[]{R.string.navigation_dismiss_app, R.string.navigation_clear_all, R.string.navigation_back_to_launcher},
+                new Runnable[]{this::dismissCenteredRecent, this::clearRecentApps, this::exitRecentsToHome});
         recent.setControls(this::closeOnOutsideTouch, this::browseRecents);
         showPanel(recent, true);
     }
@@ -717,6 +717,9 @@ final class NavigationShortcuts {
                         dismissCenteredRecent();
                     }
                     return true;
+                case KeyEvent.KEYCODE_BUTTON_SELECT:
+                    if (event.getRepeatCount() == 0) clearRecentApps();
+                    return true;
                 default:
                     return false;
             }
@@ -796,6 +799,10 @@ final class NavigationShortcuts {
         queueRecentInput(RecentInput.DISMISS);
     }
 
+    private void clearRecentApps() {
+        queueRecentInput(RecentInput.CLEAR_ALL);
+    }
+
     private void browseRecents(int direction) {
         queueRecentInput(direction < 0 ? RecentInput.PREVIOUS : RecentInput.NEXT);
     }
@@ -828,12 +835,23 @@ final class NavigationShortcuts {
             sent = gesture(.5f + offset, .48f, .5f - offset, .48f, 160);
         } else if (input == RecentInput.DISMISS) {
             sent = gesture(.5f, .48f, .5f, .1f, 200);
+        } else if (input == RecentInput.CLEAR_ALL) {
+            Point size = screenSize();
+            if (!"Retroid Pocket 6".equals(Build.MODEL) || size.x <= size.y) {
+                Toast.makeText(service, R.string.navigation_clear_all_unavailable, Toast.LENGTH_SHORT).show();
+                processRecentInputs();
+                return;
+            }
+            // Retroid shifts the overview toolbar up when the three-button bar is present.
+            int navigationMode = Settings.Secure.getInt(service.getContentResolver(), "navigation_mode", 2);
+            float toolbarY = navigationMode == 0 ? .795f : .898f;
+            sent = gesture(.60f, toolbarY, .60f, toolbarY, 60);
         } else {
             sent = gesture(.5f, .48f, .502f, .48f, 85);
         }
         if (!sent) {
             recentInputs.clear();
-        } else if (input == RecentInput.OPEN) {
+        } else if (input == RecentInput.OPEN || input == RecentInput.CLEAR_ALL) {
             openingRecent = true;
             recentInputs.clear();
         }

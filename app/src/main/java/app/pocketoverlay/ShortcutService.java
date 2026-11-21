@@ -53,6 +53,7 @@ public final class ShortcutService extends AccessibilityService {
     private SharedPreferences settings;
     private PerformanceOverlay performanceOverlay;
     private NavigationShortcuts navigation;
+    private ControllerRemap controllerRemap;
     private FrameLayout overlayWindow;
     private OverlayView panel;
     private boolean slidingOut;
@@ -64,6 +65,7 @@ public final class ShortcutService extends AccessibilityService {
         battery = getSystemService(BatteryManager.class);
         power = getSystemService(PowerManager.class);
         settings = OverlaySettings.open(this);
+        if (controllerRemap == null) controllerRemap = ControllerRemap.acquire(this, settings);
         if (navigation != null) {
             navigation.clear();
         }
@@ -76,6 +78,7 @@ public final class ShortcutService extends AccessibilityService {
 
     @Override
     protected boolean onKeyEvent(KeyEvent event) {
+        if (GamepadTestView.captureKey(event)) return true;
         PressedKey existing = findPressed(event);
         if (existing == null && navigation != null) {
             if (navigation.onKeyEvent(event)) {
@@ -341,6 +344,10 @@ public final class ShortcutService extends AccessibilityService {
 
     @Override
     public void onDestroy() {
+        if (controllerRemap != null) {
+            controllerRemap.release();
+            controllerRemap = null;
+        }
         onInterrupt();
         if (performanceOverlay != null) {
             performanceOverlay.close();

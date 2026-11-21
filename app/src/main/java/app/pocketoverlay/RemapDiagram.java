@@ -1,7 +1,6 @@
 package app.pocketoverlay;
 
 import android.content.Context;
-import android.content.SharedPreferences;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Path;
@@ -16,9 +15,13 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.function.IntSupplier;
 
-import app.pocketoverlay.OverlaySettings.Binding;
 
 final class RemapDiagram extends LinearLayout {
+    // Stick ring centers in the shared 736 × 312 front artwork.
+    static final int LEFT_STICK_X = 87;
+    static final int LEFT_STICK_Y = 100;
+    static final int RIGHT_STICK_X = 647;
+    static final int RIGHT_STICK_Y = 196;
     private final LinearLayout shoulders;
     private final LinearLayout body;
     private final ImageView console;
@@ -29,12 +32,10 @@ final class RemapDiagram extends LinearLayout {
     private final Path trigger = new Path();
     private final Path bumper = new Path();
     private final Paint plastic = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final SharedPreferences settings;
     private final Map<Button, IntSupplier> boxes = new LinkedHashMap<>();
 
-    RemapDiagram(Context context, SharedPreferences settings, int color) {
+    RemapDiagram(Context context, int color) {
         super(context);
-        this.settings = settings;
         setOrientation(VERTICAL);
         shoulders = new LinearLayout(context);
         addView(shoulders, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
@@ -77,10 +78,6 @@ final class RemapDiagram extends LinearLayout {
     void setConsoleImage(int drawable) {
         console.setImageResource(drawable);
         invalidate();
-    }
-
-    void addBinding(Binding binding, Button button, boolean leftSide) {
-        addCallout(button, leftSide, () -> binding.key(settings));
     }
 
     void addSystemButton(Button button, boolean leftSide, int key) {
@@ -190,12 +187,14 @@ final class RemapDiagram extends LinearLayout {
             case KeyEvent.KEYCODE_BUTTON_B: return new float[]{714, 261};
             case KeyEvent.KEYCODE_BUTTON_X: return new float[]{713, 202};
             case KeyEvent.KEYCODE_BUTTON_Y: return new float[]{684, 231};
-            case KeyEvent.KEYCODE_BUTTON_THUMBL: return new float[]{146, 226};
-            case KeyEvent.KEYCODE_BUTTON_THUMBR: return new float[]{712, 324};
+            case KeyEvent.KEYCODE_BUTTON_THUMBL: return new float[]{LEFT_STICK_X + 62, LEFT_STICK_Y + 129};
+            case KeyEvent.KEYCODE_BUTTON_THUMBR: return new float[]{RIGHT_STICK_X + 62, RIGHT_STICK_Y + 129};
             case KeyEvent.KEYCODE_DPAD_UP: return new float[]{153, 298};
             case KeyEvent.KEYCODE_DPAD_DOWN: return new float[]{153, 345};
             case KeyEvent.KEYCODE_DPAD_LEFT: return new float[]{129, 322};
             case KeyEvent.KEYCODE_DPAD_RIGHT: return new float[]{177, 322};
+            case KeyEvent.KEYCODE_BUTTON_SELECT: return new float[]{184, 178};
+            case KeyEvent.KEYCODE_BUTTON_START: return new float[]{678, 178};
             case KeyEvent.KEYCODE_HOME: return new float[]{180, 381};
             case KeyEvent.KEYCODE_BACK: return new float[]{681, 383};
             default: return null;

@@ -24,11 +24,13 @@ import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Locale;
+import java.util.regex.Pattern;
 
 final class AppUpdate {
-    static final String PROJECT = "https://github.com/linxlone666/Pocket-Overlay";
+    static final String PROJECT = "https://github.com/linxlone666/Pocket-Plus";
+    // GitHub repository IDs stay the same when a repository is renamed.
     private static final String LATEST =
-            "https://api.github.com/repos/linxlone666/Pocket-Overlay/releases/latest";
+            "https://api.github.com/repositories/1449641281/releases/latest";
     private static final int MAX_METADATA_BYTES = 1024 * 1024;
     private static final long MAX_APK_BYTES = 64L * 1024 * 1024;
 
@@ -63,21 +65,30 @@ final class AppUpdate {
         if (!isNewer(version, installedVersion)) return null;
 
         String name = "Pocket-Overlay-" + version + ".apk";
-        String download = PROJECT + "/releases/download/" + tag + "/" + name;
+
         JSONArray assets = release.getJSONArray("assets");
         for (int i = 0; i < assets.length(); i++) {
             JSONObject asset = assets.getJSONObject(i);
-            if (!name.equals(asset.getString("name"))
-                    || !download.equals(asset.getString("browser_download_url"))) continue;
+            if (!name.equals(asset.getString("name"))) continue;
+            URL download = new URL(asset.getString("browser_download_url"));
+            if (!matchesAsset(download, tag, name)) continue;
             long size = asset.getLong("size");
             String digest = asset.isNull("digest") ? "" : asset.optString("digest");
             if (size <= 0 || size > MAX_APK_BYTES
                     || (!digest.isEmpty() && !digest.matches("sha256:[0-9a-fA-F]{64}"))) {
                 throw new IOException("Invalid update asset metadata");
             }
-            return new Release(version, new URL(download), size, digest);
+            return new Release(version, download, size, digest);
         }
         throw new IOException("The latest release has no matching APK");
+    }
+
+    private static boolean matchesAsset(URL url, String tag, String name) {
+        return "https".equals(url.getProtocol()) && "github.com".equalsIgnoreCase(url.getHost())
+                && url.getPort() == -1 && url.getUserInfo() == null
+                && url.getQuery() == null && url.getRef() == null
+                && url.getPath().matches("/linxlone666/[A-Za-z0-9_.-]+/releases/download/"
+                        + Pattern.quote(tag + "/" + name));
     }
 
     @SuppressWarnings("deprecation")

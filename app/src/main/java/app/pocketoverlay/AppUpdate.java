@@ -52,7 +52,13 @@ final class AppUpdate {
 
     static Release check(String installedVersion) throws IOException, JSONException {
         ByteArrayOutputStream body = new ByteArrayOutputStream();
-        HttpURLConnection connection = connect(new URL(LATEST), "application/vnd.github+json");
+        HttpURLConnection connection;
+        try {
+            connection = connect(new URL(LATEST), "application/vnd.github+json");
+        } catch (HttpStatusException error) {
+            if (error.status != HttpURLConnection.HTTP_FORBIDDEN && error.status != 429) throw error;
+            return checkPublicRelease(installedVersion);
+        }
         try (InputStream input = connection.getInputStream()) {
             copy(input, body, MAX_METADATA_BYTES);
         } finally {
@@ -81,6 +87,37 @@ final class AppUpdate {
             return new Release(version, download, size, digest);
         }
         throw new IOException("The latest release has no matching APK");
+    }
+
+    private static Release checkPublicRelease(String installedVersion) throws IOException {
+        HttpURLConnection page = connect(new URL(PROJECT + "/releases/latest"), "text/html", "HEAD");
+        URL latest;
+        try {
+            latest = page.getURL();
+        } finally {
+            page.disconnect();
+        }
+        String path = latest.getPath();
+        if (!"github.com".equalsIgnoreCase(latest.getHost())
+                || !path.matches("/linxlone666/[A-Za-z0-9_.-]+/releases/tag/v?[0-9.]+")) {
+            throw new IOException("Unexpected public release URL");
+        }
+        String tag = path.substring(path.lastIndexOf('/') + 1);
+        String version = tag.startsWith("v") ? tag.substring(1) : tag;
+        if (!isNewer(version, installedVersion)) return null;
+
+        String name = "Pocket-Overlay-" + version + ".apk";
+        URL download = new URL(latest, path.replace("/releases/tag/", "/releases/download/") + "/" + name);
+        if (!matchesAsset(download, tag, name)) throw new IOException("Unexpected update asset URL");
+        HttpURLConnection asset = connect(download, "application/octet-stream", "HEAD");
+        try {
+            long size = asset.getContentLengthLong();
+            if (size <= 0 || size > MAX_APK_BYTES) throw new IOException("Invalid update asset size");
+            // The APK signature and package metadata still authenticate this download.
+            return new Release(version, download, size, "");
+        } finally {
+            asset.disconnect();
+        }
     }
 
     private static boolean matchesAsset(URL url, String tag, String name) {
@@ -145,7 +182,20 @@ final class AppUpdate {
         return false;
     }
 
+    private static final class HttpStatusException extends IOException {
+        final int status;
+
+        HttpStatusException(int status) {
+            super("GitHub returned " + status);
+            this.status = status;
+        }
+    }
+
     private static HttpURLConnection connect(URL url, String accept) throws IOException {
+        return connect(url, accept, "GET");
+    }
+
+    private static HttpURLConnection connect(URL url, String accept, String method) throws IOException {
         for (int redirects = 0; redirects <= 4; redirects++) {
             String host = url.getHost();
             if (!"https".equals(url.getProtocol()) || (!"api.github.com".equals(host)
@@ -156,6 +206,7 @@ final class AppUpdate {
 
             HttpURLConnection connection = (HttpURLConnection) url.openConnection();
             connection.setInstanceFollowRedirects(false);
+            connection.setRequestMethod(method);
             connection.setConnectTimeout(12_000);
             connection.setReadTimeout(20_000);
             connection.setRequestProperty("User-Agent", "Pocket-Overlay");
@@ -163,7 +214,7 @@ final class AppUpdate {
             try {
                 int status = connection.getResponseCode();
                 if (status == HttpURLConnection.HTTP_OK) return connection;
-                if (status < 300 || status >= 400) throw new IOException("GitHub returned " + status);
+                if (status < 300 || status >= 400) throw new HttpStatusException(status);
                 String location = connection.getHeaderField("Location");
                 if (location == null) throw new IOException("Missing update redirect");
                 url = new URL(url, location);
